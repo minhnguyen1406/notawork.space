@@ -1,0 +1,6 @@
+# Copy this file to worker/.dev.vars (which is git-ignored) and fill it in.
+# Leave LiveKit values empty to run without voice and video.
+ROOM_PASSWORD=
+LIVEKIT_URL=
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=

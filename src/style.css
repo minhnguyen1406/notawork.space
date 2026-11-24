@@ -1,0 +1,368 @@
+:root {
+  --bg: #15121f;
+  --panel: rgba(28, 22, 34, 0.86);
+  --panel-solid: #241c2b;
+  --line: rgba(255, 233, 201, 0.16);
+  --text: #f6ecdd;
+  --muted: #b9a998;
+  --accent: #e4572e;
+  --accent-2: #f3a712;
+  --ok: #76b041;
+  font-family: ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+button:hover {
+  border-color: rgba(255, 233, 201, 0.4);
+}
+button.on {
+  background: var(--ok);
+  border-color: transparent;
+  color: #10210a;
+  font-weight: 600;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+input {
+  font: inherit;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  width: 100%;
+}
+input::placeholder {
+  color: var(--muted);
+}
+
+/* Join card */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 11, 20, 0.55);
+  backdrop-filter: blur(6px);
+  z-index: 30;
+}
+.card {
+  width: min(400px, 100%);
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.card h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+}
+.card .sub {
+  margin: 0 0 10px;
+  color: var(--muted);
+}
+.card label,
+.field-label {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.card button[type='submit'] {
+  margin-top: 14px;
+  background: var(--accent);
+  border-color: transparent;
+  font-weight: 700;
+  padding: 12px;
+  border-radius: 12px;
+}
+.card button[type='submit']:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.error {
+  color: #ff9d8a;
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+.swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.swatch {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+}
+.swatch.picked {
+  border-color: var(--text);
+}
+
+/* In-room interface */
+#topbar {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  z-index: 10;
+}
+.pill {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 600;
+}
+
+#chat {
+  position: fixed;
+  right: 14px;
+  top: 14px;
+  width: min(320px, calc(100vw - 28px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+#chat-log {
+  max-height: 34vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  overflow-wrap: anywhere;
+}
+#chat-log .who {
+  font-weight: 700;
+  margin-right: 6px;
+}
+#chat-log .system {
+  color: var(--muted);
+  font-style: italic;
+}
+#chat-input {
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+}
+
+#menu {
+  position: fixed;
+  left: 14px;
+  top: 70px;
+  width: 250px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 13px;
+  backdrop-filter: blur(8px);
+  z-index: 9;
+}
+#menu h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+#menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#menu li span {
+  color: var(--muted);
+}
+#menu .tally {
+  margin: 8px 0 0;
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+#prompt,
+#toast,
+#help {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 16px;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+  max-width: calc(100vw - 28px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 10;
+}
+#prompt {
+  bottom: 96px;
+  font-weight: 700;
+}
+#toast {
+  top: 70px;
+  background: var(--accent-2);
+  color: #2a1a00;
+  font-weight: 700;
+  border-color: transparent;
+  z-index: 25;
+}
+#help {
+  bottom: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Sit-down face grid */
+#grid {
+  position: fixed;
+  inset: 70px 14px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 11, 20, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px;
+  backdrop-filter: blur(8px);
+  z-index: 15;
+}
+#grid-tiles {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+}
+.tile {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0f0b14;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+.tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tile .initial {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 44px;
+  font-weight: 800;
+  color: #1a1420;
+}
+.tile .tile-name {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  padding: 3px 9px;
+  font-size: 14px;
+}
+.tile.speaking {
+  outline: 3px solid var(--ok);
+}
+.grid-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Full-screen viewing of whatever is on the cinema screen */
+#theater {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+#theater video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+#theater-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+}
+
+@media (max-width: 720px) {
+  #help {
+    display: none;
+  }
+  #chat {
+    top: auto;
+    bottom: 14px;
+  }
+  #chat-log {
+    max-height: 22vh;
+  }
+}
