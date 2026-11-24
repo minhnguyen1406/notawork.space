@@ -19,6 +19,13 @@ export interface PlayerInfo {
   seat: string | null;
 }
 
+/** What the hanging billboard shows. Fetched by the server every few minutes. */
+export interface Board {
+  news: { src: string; title: string }[];
+  stocks: { sym: string; price: number; pct: number }[];
+  at: number;
+}
+
 export type ClientMsg =
   | { t: 'join'; name: string; color: string; password?: string }
   | { t: 'move'; x: number; z: number; ry: number }
@@ -34,6 +41,7 @@ export type ServerMsg =
       id: string;
       players: PlayerInfo[];
       kitchen: KitchenState;
+      board: Board;
       media: { url: string; token: string } | null;
     }
   | { t: 'denied'; reason: 'full' | 'password' }
@@ -43,4 +51,5 @@ export type ServerMsg =
   | { t: 'sit'; id: string; seat: string | null }
   | { t: 'chat'; id: string; name: string; text: string }
   | { t: 'kitchen'; state: KitchenState }
-  | { t: 'notice'; text: string };
+  | { t: 'notice'; text: string }
+  | { t: 'board'; board: Board };

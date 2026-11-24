@@ -6,6 +6,7 @@ import {
   MAX_PLAYERS,
   ROOM_HALF,
   TICK_HZ,
+  type Board,
   type ClientMsg,
   type PlayerInfo,
   type ServerMsg,
@@ -19,6 +20,8 @@ export interface Env {
   LIVEKIT_URL?: string;
   LIVEKIT_API_KEY?: string;
   LIVEKIT_API_SECRET?: string;
+  /** Optional. With a Finnhub key, stock prices come from Finnhub instead of Yahoo's unofficial endpoint. */
+  FINNHUB_API_KEY?: string;
 }
 
 const LIVEKIT_ROOM = 'main';
@@ -54,6 +57,21 @@ export class Room extends DurableObject<Env> {
   private timer: ReturnType<typeof setInterval> | null = null;
   private moved = false;
   private ticks = 0;
+  private board: Board = { news: [], stocks: [], at: 0 };
+  private boardBusy = false;
+
+  /** Refresh headlines and prices if they are older than ten minutes. */
+  private refreshBoard() {
+    if (this.boardBusy || Date.now() - this.board.at < BOARD_TTL_MS) return;
+    this.boardBusy = true;
+    loadBoard(this.env.FINNHUB_API_KEY, this.board)
+      .then((board) => {
+        this.board = board;
+        this.broadcast({ t: 'board', board });
+      })
+      .catch((err) => console.error('board refresh failed', err))
+      .finally(() => (this.boardBusy = false));
+  }
 
   async fetch(): Promise<Response> {
     const pair = new WebSocketPair();
@@ -123,6 +141,7 @@ export class Room extends DurableObject<Env> {
     if (this.ticks % (TICK_HZ * 5) === 0) {
       const cutoff = Date.now() - STALE_MS;
       for (const [ws, p] of [...this.players]) if (p.lastSeen < cutoff) this.drop(ws);
+      this.refreshBoard();
     }
   }
 
@@ -237,8 +256,10 @@ export class Room extends DurableObject<Env> {
       id: me.id,
       players: [...this.players.values()].map(publicInfo),
       kitchen: this.kitchen,
+      board: this.board,
       media,
     });
+    this.refreshBoard();
     this.broadcast({ t: 'join', player: publicInfo(me) }, ws);
     this.timer ??= setInterval(() => this.tick(), 1000 / TICK_HZ);
   }
@@ -274,4 +295,98 @@ async function livekitToken(apiKey: string, apiSecret: string, identity: string,
   ]);
   const sig = new Uint8Array(await crypto.subtle.sign('HMAC', k, text.encode(body)));
   return body + '.' + b64url(sig);
+}
+
+// --- Billboard data: headlines from RSS feeds, prices from a quote API. No keys needed by default.
+
+const BOARD_TTL_MS = 10 * 60_000;
+const FEEDS = [
+  { src: 'BBC World', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
+  { src: 'VnExpress', url: 'https://e.vnexpress.net/rss/news.rss' },
+];
+const HEADLINES_PER_FEED = 6;
+const SYMBOLS: { sym: string; label: string }[] = [
+  { sym: '^GSPC', label: 'S&P 500' },
+  { sym: '^IXIC', label: 'NASDAQ' },
+  { sym: 'AAPL', label: 'AAPL' },
+  { sym: 'NVDA', label: 'NVDA' },
+  { sym: 'MSFT', label: 'MSFT' },
+  { sym: 'GOOGL', label: 'GOOGL' },
+  { sym: 'AMZN', label: 'AMZN' },
+  { sym: 'TSLA', label: 'TSLA' },
+  { sym: 'META', label: 'META' },
+];
+const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; billboard)' };
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+const decode = (s: string) =>
+  s
+    .replace(/&#(x?)([0-9a-f]+);/gi, (_, hex, n) => String.fromCodePoint(parseInt(n, hex ? 16 : 10)))
+    .replace(/&([a-z]+);/gi, (m, name) => ENTITIES[name.toLowerCase()] ?? m);
+
+function parseTitles(xml: string, max: number): string[] {
+  const out: string[] = [];
+  const re = /<item[\s>][\s\S]*?<title>\s*(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?\s*<\/title>/g;
+  for (let m = re.exec(xml); m && out.length < max; m = re.exec(xml)) {
+    const title = decode(m[1]).replace(/\s+/g, ' ').trim().slice(0, 160);
+    if (title) out.push(title);
+  }
+  return out;
+}
+
+async function quote(sym: string, finnhubKey?: string): Promise<{ price: number; pct: number } | null> {
+  if (finnhubKey && !sym.startsWith('^')) {
+    const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${finnhubKey}`);
+    if (!r.ok) return null;
+    const q = (await r.json()) as { c?: number; dp?: number };
+    return q.c ? { price: q.c, pct: q.dp ?? 0 } : null;
+  }
+  const r = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`,
+    { headers: UA },
+  );
+  if (!r.ok) return null;
+  const j = (await r.json()) as {
+    chart?: { result?: { meta?: { regularMarketPrice?: number; chartPreviousClose?: number; previousClose?: number } }[] };
+  };
+  const meta = j.chart?.result?.[0]?.meta;
+  const prev = meta?.chartPreviousClose ?? meta?.previousClose;
+  if (!meta?.regularMarketPrice || !prev) return null;
+  return { price: meta.regularMarketPrice, pct: ((meta.regularMarketPrice - prev) / prev) * 100 };
+}
+
+/** Fetch everything; anything that fails keeps its previous value. */
+async function loadBoard(finnhubKey: string | undefined, old: Board): Promise<Board> {
+  const feeds = await Promise.all(
+    FEEDS.map(async (f) => {
+      try {
+        const r = await fetch(f.url, { headers: UA });
+        if (!r.ok) return [];
+        return parseTitles(await r.text(), HEADLINES_PER_FEED).map((title) => ({ src: f.src, title }));
+      } catch {
+        return [];
+      }
+    }),
+  );
+  // Alternate between sources so the board doesn't show one feed in a block.
+  const news: Board['news'] = [];
+  for (let i = 0; i < HEADLINES_PER_FEED; i++) for (const f of feeds) if (f[i]) news.push(f[i]);
+
+  const quotes = await Promise.all(
+    SYMBOLS.map(async ({ sym, label }) => {
+      try {
+        const q = await quote(sym, finnhubKey);
+        return q ? { sym: label, price: +q.price.toFixed(2), pct: +q.pct.toFixed(2) } : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const stocks = quotes.filter((q) => q !== null);
+
+  return {
+    news: news.length ? news : old.news,
+    stocks: stocks.length ? stocks : old.stocks,
+    at: Date.now(),
+  };
 }

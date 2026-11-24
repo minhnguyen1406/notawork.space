@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import './style.css';
 import { COLORS, ROOM_HALF, TICK_HZ, type ClientMsg, type PlayerInfo, type ServerMsg } from '../shared/protocol';
 import { COLLIDERS, GRID_GROUPS, SCREEN, SEATS, STATIONS, seatGroup, type Seat, type Station } from '../shared/layout';
@@ -35,15 +39,26 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+// Neutral tone mapping keeps camera feeds and the cinema screen looking natural.
+renderer.toneMapping = THREE.NeutralToneMapping;
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 900);
 const world = buildWorld();
 const kitchen = new KitchenView(world.scene);
 
+// Bloom: only things brighter than white glow (lanterns, fire, neon, string lights).
+const composer = new EffectComposer(
+  renderer,
+  new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }),
+);
+composer.addPass(new RenderPass(world.scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.7, 1.0));
+composer.addPass(new OutputPass());
+
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 }
@@ -64,6 +79,7 @@ const keys = new Set<string>();
 let camYaw = 0;
 let camPitch = 0.5;
 let camDist = 12;
+let shownDist = 12;
 const camFocus = new THREE.Vector3(0, 1.6, 13);
 
 const send = (msg: ClientMsg) => {
@@ -286,7 +302,32 @@ function wireToggle(btn: HTMLButtonElement, on: string, off: string, action: () 
     refreshMediaButtons();
   };
 }
-wireToggle(btnMic, 'Mic on', 'Mic off', () => media!.toggleMic());
+// Mic: click the button or press M to leave it on; hold V to talk only while held.
+let micLatched = false;
+let talkHeld = false;
+let micQueue: Promise<void> = Promise.resolve();
+function applyMic() {
+  if (!media) return;
+  btnMic.textContent = micLatched ? 'Mic on' : talkHeld ? 'Talking…' : 'Mic off · hold V';
+  btnMic.classList.toggle('on', micLatched || talkHeld);
+  // Run changes one after another so a quick press and release can't end up out of order.
+  micQueue = micQueue.then(async () => {
+    try {
+      await media!.setMic(micLatched || talkHeld);
+    } catch (err) {
+      console.error(err);
+      micLatched = talkHeld = false;
+      btnMic.textContent = 'Mic off · hold V';
+      btnMic.classList.remove('on');
+      toast('The microphone was blocked. Check the browser permission and try again.');
+    }
+  });
+}
+btnMic.textContent = 'Mic off · hold V';
+btnMic.onclick = () => {
+  micLatched = !micLatched;
+  applyMic();
+};
 wireToggle(btnCam, 'Camera on', 'Camera off', () => media!.toggleCamera());
 btnShare.onclick = async () => {
   try {
@@ -309,6 +350,7 @@ function handle(msg: ServerMsg) {
       me.local = true;
       camFocus.set(me.x, 1.6, me.z);
       kitchen.setState(msg.kitchen, avatars);
+      world.setBoard(msg.board);
       renderMenu();
       $('join').hidden = true;
       $('hud').hidden = false;
@@ -357,6 +399,9 @@ function handle(msg: ServerMsg) {
     case 'notice':
       toast(msg.text);
       logLine(msg.text);
+      break;
+    case 'board':
+      world.setBoard(msg.board);
       break;
   }
 }
@@ -520,14 +565,37 @@ addEventListener('keydown', (e) => {
       if (!e.repeat && t?.station?.type === 'board') send({ t: 'act', station: t.station.id });
       return;
     }
+    case 'KeyV':
+      if (!e.repeat && !talkHeld) {
+        talkHeld = true;
+        applyMic();
+      }
+      return;
+    case 'KeyM':
+      if (!e.repeat) {
+        micLatched = !micLatched;
+        applyMic();
+      }
+      return;
     case 'Escape':
       closeTheater();
       return;
   }
   keys.add(e.code);
 });
-addEventListener('keyup', (e) => keys.delete(e.code));
-addEventListener('blur', () => keys.clear());
+function releaseTalk() {
+  if (!talkHeld) return;
+  talkHeld = false;
+  applyMic();
+}
+addEventListener('keyup', (e) => {
+  keys.delete(e.code);
+  if (e.code === 'KeyV') releaseTalk();
+});
+addEventListener('blur', () => {
+  keys.clear();
+  releaseTalk();
+});
 
 // Drag to orbit, scroll to zoom.
 let dragging = false;
@@ -555,8 +623,11 @@ canvas.addEventListener(
 
 const LIMIT = ROOM_HALF - 0.7;
 const BODY = 0.38;
-const blocked = (x: number, z: number) =>
-  COLLIDERS.some((c) => Math.abs(x - c.x) < c.hw + BODY && Math.abs(z - c.z) < c.hd + BODY);
+const inside = (c: (typeof COLLIDERS)[number], x: number, z: number) =>
+  Math.abs(x - c.x) < c.hw + BODY && Math.abs(z - c.z) < c.hd + BODY;
+/** Would moving to (x, z) walk into something? Things you already overlap (the chair you just stood up from) don't count. */
+const blocked = (x: number, z: number, fromX: number, fromZ: number) =>
+  COLLIDERS.some((c) => inside(c, x, z) && !inside(c, fromX, fromZ));
 
 const turnToward = (from: number, to: number, k: number) => {
   const d = ((to - from + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
@@ -593,8 +664,8 @@ function moveMe(dt: number) {
   const step = 5.5 * dt;
   const nx = Math.max(-LIMIT, Math.min(LIMIT, me.x + dx * step));
   const nz = Math.max(-LIMIT, Math.min(LIMIT, me.z + dz * step));
-  if (!blocked(nx, me.z)) me.x = nx;
-  if (!blocked(me.x, nz)) me.z = nz;
+  if (!blocked(nx, me.z, me.x, me.z)) me.x = nx;
+  if (!blocked(me.x, nz, me.x, me.z)) me.z = nz;
   me.ry = turnToward(me.ry, Math.atan2(dx, dz), Math.min(1, dt * 14));
 }
 
@@ -660,16 +731,23 @@ function frame(nowMs: number) {
     }
   }
 
+  // Keep a low camera inside the parapet so the wall never fills the view; a high camera may drift out past the edge.
   const cp = Math.cos(camPitch);
-  camera.position.set(
-    camFocus.x + Math.sin(camYaw) * cp * camDist,
-    camFocus.y + Math.sin(camPitch) * camDist,
-    camFocus.z + Math.cos(camYaw) * cp * camDist,
-  );
+  const dirX = Math.sin(camYaw) * cp;
+  const dirY = Math.sin(camPitch);
+  const dirZ = Math.cos(camYaw) * cp;
+  let fit = camDist;
+  for (let i = 0; i < 14; i++) {
+    const limit = ROOM_HALF - 0.5 + Math.max(0, camFocus.y + dirY * fit - 2) * 4;
+    if (Math.abs(camFocus.x + dirX * fit) <= limit && Math.abs(camFocus.z + dirZ * fit) <= limit) break;
+    fit *= 0.88;
+  }
+  shownDist += (fit - shownDist) * Math.min(1, dt * 10);
+  camera.position.set(camFocus.x + dirX * shownDist, camFocus.y + dirY * shownDist, camFocus.z + dirZ * shownDist);
   camera.lookAt(camFocus);
 
   kitchen.update(camera);
-  world.update(time);
-  renderer.render(world.scene, camera);
+  world.update(time, dt);
+  composer.render();
 }
 requestAnimationFrame(frame);

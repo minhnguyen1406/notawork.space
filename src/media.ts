@@ -187,10 +187,9 @@ export class Media {
     return this.screenOwner === this.myId;
   }
 
-  async toggleMic() {
+  async setMic(on: boolean) {
     const p = this.room.localParticipant;
-    await p.setMicrophoneEnabled(!p.isMicrophoneEnabled);
-    return p.isMicrophoneEnabled;
+    if (p.isMicrophoneEnabled !== on) await p.setMicrophoneEnabled(on);
   }
 
   async toggleCamera() {

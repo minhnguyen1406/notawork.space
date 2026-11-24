@@ -2,7 +2,7 @@
 // Axes: +x is east, +z is south. An avatar with ry = 0 faces +z.
 import type { IngType } from './kitchen';
 
-export const SPAWN = { x: 0, z: 13 };
+export const SPAWN = { x: 0, z: 10 };
 
 /** The cinema screen on the north wall. */
 export const SCREEN = { x: 0, y: 4.9, z: -19.7, w: 14, h: 7.875 };
@@ -91,8 +91,47 @@ export interface Collider {
   hw: number;
   hd: number;
 }
+/** Potted plants: position and size multiplier. */
+export const PLANTS: { x: number; z: number; scale: number }[] = [
+  { x: -17.6, z: -17.6, scale: 1.4 },
+  { x: 17.6, z: -17.6, scale: 1.4 },
+  { x: -17.6, z: 17.6, scale: 1.3 },
+  { x: 17.6, z: 17.6, scale: 1.3 },
+  { x: -3.4, z: 18.2, scale: 1 },
+  { x: 3.4, z: 18.2, scale: 1 },
+  { x: -18.4, z: -7, scale: 1.2 },
+  { x: -18.4, z: -1, scale: 1.2 },
+];
+
+/** Tall corner masts that hold up the billboard cables and string lights. */
+export const MASTS: { x: number; z: number }[] = [
+  { x: -19, z: -19 },
+  { x: 19, z: -19 },
+  { x: -19, z: 19 },
+  { x: 19, z: 19 },
+];
+export const MAST_H = 15;
+
+/** The hanging scoreboard. */
+export const BILLBOARD = { x: 0, y: 12.6, z: 2, w: 6.4, h: 3.6 };
+
+/** The pergola over the kitchen. */
+export const PERGOLA = { x1: 10.7, x2: 19.9, z1: -5.5, z2: 11.5, h: 4.5 };
+export const PERGOLA_POSTS: { x: number; z: number }[] = [
+  { x: PERGOLA.x1, z: PERGOLA.z1 },
+  { x: PERGOLA.x1, z: PERGOLA.z2 },
+  { x: PERGOLA.x2, z: PERGOLA.z1 },
+  { x: PERGOLA.x2, z: PERGOLA.z2 },
+];
+
+const square = (x: number, z: number, half: number): Collider => ({ x, z, hw: half, hd: half });
+
 export const COLLIDERS: Collider[] = [
-  ...STATIONS.map((s) => ({ x: s.x, z: s.z, hw: STATION_HALF, hd: STATION_HALF })),
+  ...STATIONS.map((s) => square(s.x, s.z, STATION_HALF)),
   { x: DINING.x, z: DINING.z, hw: 0.9, hd: 2.9 },
-  { x: LOUNGE.x, z: LOUNGE.z, hw: 0.9, hd: 0.9 },
+  square(LOUNGE.x, LOUNGE.z, 1.0), // fire pit
+  ...SEATS.map((s) => square(s.x, s.z, s.group === 'dining' ? 0.4 : 0.6)),
+  ...PLANTS.map((p) => square(p.x, p.z, 0.42 * p.scale)),
+  ...MASTS.map((m) => square(m.x, m.z, 0.3)),
+  ...PERGOLA_POSTS.map((p) => square(p.x, p.z, 0.2)),
 ];

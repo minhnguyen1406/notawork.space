@@ -3,8 +3,9 @@
 A small 3D room for a group of friends. Walk around, talk to whoever is nearby, watch things
 together on the big screen, and cook in the kitchen with nobody timing you.
 
-- **Room:** low-poly 3D space, avatars, name tags, text chat.
-- **Voice and video:** a live video bubble above nearby avatars; voices fade with distance.
+- **Room:** a low-poly rooftop at dusk, avatars, name tags, text chat.
+- **Voice and video:** a live video bubble above nearby avatars; voices fade with distance. Hold V to talk, M to toggle the mic.
+- **Billboard:** a hanging scoreboard with world and Vietnam headlines (BBC, VnExpress) and US stock prices, refreshed every ten minutes.
 - **Cinema:** share your screen (with sound) to the big screen. "Watch full screen" for movies.
 - **Sit down:** lounge chairs and the dining table switch to a grid of faces for everyone seated there.
 - **Kitchen:** take ingredients, chop, cook, plate and serve. Food never burns.
