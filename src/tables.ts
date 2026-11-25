@@ -1,6 +1,7 @@
 import { Chess, type Square } from 'chess.js';
 import { RULES, canPlay, rankOf, suitOf, SUITS, type Card, type CardsGame, type Suit } from '../shared/cards';
-import type { CardsAction, CardsView, ChessAction, ChessView, TableId } from '../shared/tables';
+import type { CardsAction, CardsView, ChessAction, ChessView, PokerView, TableId } from '../shared/tables';
+import { POKER_RULES, type PokerAction } from '../shared/poker';
 
 const PIECE: Record<string, string> = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚' };
 const SUIT_SYMBOL: Record<Suit, string> = { S: '♠', H: '♥', D: '♦', C: '♣' };
@@ -30,7 +31,7 @@ export class TableUI {
 
   constructor(
     private root: HTMLElement,
-    private send: (table: TableId, a: ChessAction | CardsAction) => void,
+    private send: (table: TableId, a: ChessAction | CardsAction | PokerAction) => void,
   ) {}
 
   clear() {
@@ -54,7 +55,8 @@ export class TableUI {
       return;
     }
     if (table === 'chess') this.chess(view as ChessView);
-    else this.cards(view as CardsView);
+    else if (table === 'cards') this.cards(view as CardsView);
+    else this.poker(view as PokerView);
   }
 
   private redraw() {
@@ -214,6 +216,106 @@ export class TableUI {
       this.root.append(chooser);
     } else {
       this.choosingSuitFor = null;
+    }
+  }
+
+  // ------------------------------------------------------------ poker
+
+  private raiseTo = 0;
+
+  private poker(v: PokerView) {
+    const chips = (n: number) => n.toLocaleString('en-US');
+    const head = el('div', 'game-head');
+    head.append(el('h2', '', "Texas Hold'em"));
+    const dealing = v.phase === 'lobby' || v.phase === 'showdown';
+    const myTurn = v.turn === v.you;
+    const me = v.players.find((p) => p.id === v.you);
+
+    if (v.phase === 'lobby') {
+      head.append(el('p', 'game-status', `${v.seated} at the table. It needs at least two.`));
+    } else if (v.phase === 'showdown') {
+      for (const line of v.results) head.append(el('p', 'game-status', line));
+    } else {
+      const who = v.players.find((p) => p.id === v.turn)?.name ?? '';
+      let status = myTurn ? 'Your turn' : `${who}'s turn`;
+      if (!me) status += ' — you will be dealt in next hand';
+      head.append(el('p', 'game-status', status));
+    }
+    this.root.append(head);
+
+    if (v.phase !== 'lobby') {
+      const seats = el('div', 'card-players');
+      for (const p of v.players) {
+        const chip = el('div', `poker-seat${p.id === v.turn ? ' turn' : ''}${p.folded ? ' folded' : ''}`);
+        const name = el('div', 'poker-name', (p.dealer ? 'Ⓓ ' : '') + (p.id === v.you ? `${p.name} (you)` : p.name));
+        const stack = el('div', 'poker-stack', `${chips(p.chips)} chips${p.allIn ? ' · all in' : p.folded ? ' · folded' : ''}`);
+        chip.append(name, stack);
+        if (p.bet > 0) chip.append(el('div', 'poker-bet', `bet ${chips(p.bet)}`));
+        if (p.hole && p.id !== v.you) {
+          const shown = el('div', 'poker-hole small');
+          for (const c of p.hole) shown.append(cardEl(c));
+          chip.append(shown);
+        }
+        seats.append(chip);
+      }
+      const board = el('div', 'card-middle');
+      for (const c of v.board) board.append(cardEl(c));
+      for (let i = v.board.length; i < 5; i++) board.append(el('div', 'card empty'));
+      this.root.append(seats, board, el('p', 'poker-pot', `Pot: ${chips(v.pot)}`));
+
+      if (me?.hole) {
+        const hole = el('div', 'poker-hole');
+        for (const c of me.hole) hole.append(cardEl(c));
+        if (me.folded) hole.classList.add('folded');
+        this.root.append(hole);
+      }
+    }
+
+    if (dealing) {
+      const deal = el('button', 'primary', v.phase === 'lobby' ? 'Deal a hand' : 'Deal the next hand');
+      deal.type = 'button';
+      deal.disabled = v.seated < 2;
+      deal.onclick = () => this.send('poker', { k: 'deal' });
+      this.root.append(deal);
+      if (v.phase === 'lobby') {
+        const rules = el('ul', 'game-rules');
+        for (const r of POKER_RULES) rules.append(el('li', '', r));
+        this.root.append(rules);
+      }
+    } else if (myTurn) {
+      const actions = el('div', 'poker-actions');
+      const fold = el('button', '', 'Fold');
+      fold.type = 'button';
+      fold.onclick = () => this.send('poker', { k: 'fold' });
+      const call = el('button', 'primary', v.toCall > 0 ? `Call ${chips(v.toCall)}` : 'Check');
+      call.type = 'button';
+      call.onclick = () => this.send('poker', { k: 'call' });
+      actions.append(fold, call);
+      if (v.raise) {
+        const { min, max } = v.raise;
+        this.raiseTo = Math.max(min, Math.min(max, this.raiseTo || min));
+        const input = el('input', 'poker-amount');
+        input.type = 'number';
+        input.min = `${min}`;
+        input.max = `${max}`;
+        input.step = '10';
+        input.value = `${this.raiseTo}`;
+        input.setAttribute('aria-label', 'Raise to');
+        input.oninput = () => (this.raiseTo = Math.max(min, Math.min(max, Math.floor(+input.value) || min)));
+        const raise = el('button', '', 'Raise to');
+        raise.type = 'button';
+        raise.onclick = () => this.send('poker', { k: 'raise', to: this.raiseTo });
+        const allIn = el('button', '', `All in (${chips(max)})`);
+        allIn.type = 'button';
+        allIn.onclick = () => this.send('poker', { k: 'raise', to: max });
+        actions.append(raise, input, allIn);
+      }
+      this.root.append(actions);
+    } else {
+      this.raiseTo = 0;
+    }
+    if (v.waiting.length && v.phase !== 'lobby') {
+      this.root.append(el('p', 'game-note', `Waiting for the next hand: ${v.waiting.join(', ')}`));
     }
   }
 }

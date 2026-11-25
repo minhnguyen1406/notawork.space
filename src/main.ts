@@ -850,7 +850,8 @@ function frame(nowMs: number) {
         media.screenVolume = theaterEl.hidden ? Math.max(0, Math.min(1, 1 - (toScreen - 13) / 12)) : 1;
         media.updateProximity(near);
       }
-      menuEl.hidden = me.x < 10 || !!me.seat;
+      // The recipe list only shows while you are standing in the kitchen.
+      menuEl.hidden = me.x < 10 || me.z < -6 || me.z > 12 || !!me.seat;
 
       const t = me.seat ? null : nearest();
       const text = me.seat ? (myGridGroup() ? '' : 'E — stand up') : t ? promptFor(t) : '';

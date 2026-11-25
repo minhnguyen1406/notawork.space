@@ -12,8 +12,9 @@ together on the big screen, and cook in the kitchen with nobody timing you.
 - **Football:** a pitch with a ball you kick by walking into it, two goals and a scoreboard.
 - **Lap race:** a timed loop through four gates, with a fastest-laps board.
 - **The wheel:** spin it and it picks one person in the room at random.
-- **Games lounge:** sit at a table to play chess (with seats for watchers) or Last Card, a traditional
-  Crazy Eights-style card game for two to eight. The server deals, so nobody can see your hand.
+- **Games lounge:** sit at a table to play chess (with seats for watchers), Last Card (a traditional
+  Crazy Eights-style card game for two to eight) or Texas Hold'em with play chips. The server deals,
+  so nobody can see your hand.
 
 ## How it fits together
 

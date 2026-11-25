@@ -9,7 +9,16 @@ import {
   topCard,
   type CardsGame,
 } from '../../shared/cards';
-import type { CardsView, ChessView } from '../../shared/tables';
+import type { CardsView, ChessView, PokerView } from '../../shared/tables';
+import {
+  betting,
+  newPoker,
+  pokerAct,
+  pokerLeave,
+  pokerStart,
+  potOf,
+  type PokerAction,
+} from '../../shared/poker';
 
 export interface Sitter {
   id: string;
@@ -33,6 +42,7 @@ export class Tables {
   private chess = new Chess();
   private chessLast: { from: string; to: string } | null = null;
   private cards: CardsGame | null = null;
+  private poker = newPoker();
 
   constructor(private io: TableIO) {}
 
@@ -44,6 +54,7 @@ export class Tables {
   refresh(group: string | null) {
     if (group === 'chess') for (const s of this.at('chess')) this.io.send(s.id, 'chess', this.chessView(s));
     if (group === 'cards') for (const s of this.at('cards')) this.io.send(s.id, 'cards', this.cardsView(s));
+    if (group === 'poker') for (const s of this.at('poker')) this.io.send(s.id, 'poker', this.pokerView(s));
   }
 
   /** Call after someone sits, stands, or disconnects (with their seat already updated or cleared). */
@@ -51,6 +62,7 @@ export class Tables {
     const was = seatGroup(before);
     const now = seatGroup(p.seat);
     if (was === 'cards' && now !== 'cards') this.leaveCards(p.id);
+    if (was === 'poker' && now !== 'poker') pokerLeave(this.poker, p.id);
     this.refresh(was);
     if (now !== was) this.refresh(now);
   }
@@ -60,6 +72,7 @@ export class Tables {
     const act = a as Record<string, unknown>;
     if (table === 'chess') this.chessAction(p, act);
     else if (table === 'cards') this.cardsAction(p, act);
+    else if (table === 'poker') this.pokerAction(p, act);
   }
 
   // ------------------------------------------------------------ chess
@@ -153,5 +166,49 @@ export class Tables {
       return;
     }
     this.refresh('cards');
+  }
+
+  // ------------------------------------------------------------ poker
+
+  private pokerView(s: Sitter): PokerView {
+    const g = this.poker;
+    const seated = this.at('poker');
+    const mine = g.seats.find((x) => x.id === s.id);
+    const myTurn = betting(g) && g.seats[g.turn]?.id === s.id;
+    const max = mine ? mine.bet + mine.chips : 0;
+    return {
+      phase: g.phase,
+      players: g.seats.map((x, i) => ({
+        id: x.id,
+        name: x.name,
+        chips: x.chips,
+        bet: x.bet,
+        folded: x.folded,
+        allIn: x.allIn,
+        dealer: i === g.dealer,
+        hole: x.id === s.id || (g.shown && !x.folded) ? x.hole : null,
+      })),
+      waiting: seated.filter((x) => !g.seats.some((y) => y.id === x.id)).map((x) => x.name),
+      board: g.board,
+      pot: potOf(g),
+      turn: betting(g) ? (g.seats[g.turn]?.id ?? null) : null,
+      toCall: myTurn && mine ? Math.min(g.currentBet - mine.bet, mine.chips) : 0,
+      raise: myTurn && mine && max > g.currentBet ? { min: Math.min(g.currentBet + g.minRaise, max), max } : null,
+      results: g.results,
+      seated: seated.length,
+      you: s.id,
+    };
+  }
+
+  private pokerAction(p: Sitter, a: Record<string, unknown>) {
+    const g = this.poker;
+    if (a.k === 'deal') {
+      if (!pokerStart(g, this.at('poker').map((x) => ({ id: x.id, name: x.name })))) return;
+    } else if (a.k === 'fold' || a.k === 'call' || (a.k === 'raise' && typeof a.to === 'number' && Number.isFinite(a.to))) {
+      if (!pokerAct(g, p.id, a as PokerAction)) return;
+    } else {
+      return;
+    }
+    this.refresh('poker');
   }
 }
