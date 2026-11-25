@@ -792,6 +792,10 @@ if (import.meta.env.DEV) {
     },
     pos: () => (me ? [me.x, me.z] : null),
     ball: () => ({ ...games.ball }),
+    id: () => myId,
+    media: () => media?.debug() ?? null,
+    cams: () => Object.fromEntries([...cams].map(([id, el]) => [id, el.videoWidth])),
+    speaking: () => [...speaking],
   };
 }
 

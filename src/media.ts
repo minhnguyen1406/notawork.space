@@ -187,6 +187,18 @@ export class Media {
     return this.screenOwner === this.myId;
   }
 
+  /** A snapshot for the automated tests. */
+  debug() {
+    const p = this.room.localParticipant;
+    return {
+      mic: p.isMicrophoneEnabled,
+      cam: p.isCameraEnabled,
+      sharing: p.isScreenShareEnabled,
+      screenOwner: this.screenOwner,
+      voices: Object.fromEntries([...this.voices].map(([id, el]) => [id, +el.volume.toFixed(2)])),
+    };
+  }
+
   async setMic(on: boolean) {
     const p = this.room.localParticipant;
     if (p.isMicrophoneEnabled !== on) await p.setMicrophoneEnabled(on);
