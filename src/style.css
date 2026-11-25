@@ -378,3 +378,248 @@ input::placeholder {
     max-height: 22vh;
   }
 }
+
+/* Sit-down game tables: the game on the left, faces down the right */
+#grid-body {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+}
+#grid-body #grid-tiles {
+  flex: 1;
+}
+#grid.game #grid-tiles {
+  flex: 0 0 220px;
+  grid-template-columns: 1fr;
+  grid-auto-rows: 150px;
+  overflow-y: auto;
+  align-content: start;
+}
+#game {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.game-head {
+  text-align: center;
+}
+.game-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.game-players,
+.game-note {
+  margin: 2px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.game-status {
+  margin: 4px 0 0;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+.game-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.game-rules {
+  max-width: 460px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+button.primary {
+  background: var(--accent);
+  border-color: transparent;
+  font-weight: 700;
+  padding: 12px 22px;
+}
+
+.chess-board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  width: min(100%, 62vh, 560px);
+  aspect-ratio: 1;
+  border: 6px solid #3a2a22;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.sq {
+  position: relative;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  backdrop-filter: none;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+.sq.light {
+  background: #ead9b8;
+}
+.sq.dark {
+  background: #a9794f;
+}
+.sq.last {
+  box-shadow: inset 0 0 0 100px rgba(243, 167, 18, 0.35);
+}
+.sq.selected {
+  box-shadow: inset 0 0 0 100px rgba(41, 161, 156, 0.55);
+}
+.sq.check {
+  box-shadow: inset 0 0 0 100px rgba(228, 87, 46, 0.6);
+}
+.sq.target::after {
+  content: '';
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: rgba(20, 16, 24, 0.45);
+}
+.piece {
+  font-size: 78cqw;
+  line-height: 1;
+}
+.piece.w {
+  color: #fffaf0;
+  -webkit-text-stroke: 1.5px #2a2028;
+}
+.piece.b {
+  color: #1d1820;
+  -webkit-text-stroke: 1px #6d6470;
+}
+
+.card {
+  width: 62px;
+  height: 88px;
+  border-radius: 9px;
+  background: #fbf7ee;
+  border: 1px solid #c9bfae;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.card .rank {
+  font-size: 26px;
+  line-height: 1;
+}
+.card .suit {
+  font-size: 26px;
+  line-height: 1.1;
+}
+.card.red,
+.suit-chooser .red {
+  color: #cf3a2c;
+}
+.card.black {
+  color: #1d1820;
+}
+button.card.back {
+  background: #3a4a8a;
+  border: 3px solid #fbf7ee;
+  color: #fbf7ee;
+  font-size: 14px;
+  backdrop-filter: none;
+}
+button.card.back:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.card-middle {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin: 8px 0;
+}
+.card-suit-call {
+  font-weight: 700;
+}
+.card-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+.card-player {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 14px;
+}
+.card-player.turn {
+  border-color: var(--accent-2);
+}
+.card-player .count {
+  background: var(--text);
+  color: #1d1820;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-weight: 800;
+}
+.card-dir {
+  color: var(--muted);
+  font-size: 13px;
+  width: 100%;
+  text-align: center;
+}
+.card-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.card-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 9px;
+  backdrop-filter: none;
+  opacity: 0.5;
+  cursor: default;
+}
+.card-btn.playable {
+  opacity: 1;
+  cursor: pointer;
+  transform: translateY(-8px);
+  box-shadow: 0 0 0 3px var(--accent-2);
+}
+.suit-chooser {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+.suit-chooser button {
+  background: #fbf7ee;
+  font-weight: 700;
+}
+.suit-chooser .black {
+  color: #1d1820;
+}
+@media (max-width: 720px) {
+  #grid.game #grid-tiles {
+    display: none;
+  }
+}

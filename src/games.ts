@@ -1,5 +1,18 @@
 import * as THREE from 'three';
-import { FLOODLIGHTS, GOAL_HALF, LAP_BOARD, PITCH, RACE, RACE_R, SCOREBOARD, WHEEL } from '../shared/layout';
+import {
+  CARDS_TABLE,
+  CHESS_TABLE,
+  FLOODLIGHTS,
+  GAMES_LOUNGE,
+  GOAL_HALF,
+  LAP_BOARD,
+  PITCH,
+  RACE,
+  RACE_R,
+  SCOREBOARD,
+  SEATS,
+  WHEEL,
+} from '../shared/layout';
 import { BALL_R, centreBall, stepBall, type BallState } from '../shared/ball';
 import type { GamesState, Lap } from '../shared/protocol';
 import { box, glow, mat } from './world';
@@ -53,6 +66,7 @@ export class Games {
     this.buildPitch();
     this.buildRace();
     this.wheel = this.buildWheel();
+    this.buildLounge();
 
     this.ballMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(BALL_R, 1), mat('#f4f1ea'));
     this.ballMesh.castShadow = true;
@@ -293,6 +307,76 @@ export class Games {
     this.drawWheel(names);
     const seg = (Math.PI * 2) / Math.max(1, names.length);
     this.spin = { from: 0, to: Math.PI * 2 * 6 + (winner + 0.5) * seg, start: time };
+  }
+
+  // ------------------------------------------------------------ games lounge (sit-down tables)
+
+  private buildLounge() {
+    const { scene } = this;
+    const L = GAMES_LOUNGE;
+    const cx = (L.x1 + L.x2) / 2;
+    const cz = (L.z1 + L.z2) / 2;
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(L.x2 - L.x1, L.z2 - L.z1), mat('#3d2f52'));
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(cx, 0.012, cz);
+    rug.receiveShadow = true;
+    scene.add(rug);
+
+    // An open frame overhead with hanging lamps, like the kitchen's.
+    for (const z of [L.z1, L.z2]) scene.add(box(L.x2 - L.x1 + 0.6, 0.26, 0.3, '#6f4a32', cx, L.h, z));
+    for (let x = L.x1; x <= L.x2 + 0.01; x += (L.x2 - L.x1) / 6) scene.add(box(0.16, 0.2, L.z2 - L.z1 + 1, '#8a5f40', x, L.h + 0.22, cz));
+    for (const [x, z] of [[L.x1, L.z1], [L.x2, L.z1], [L.x1, L.z2], [L.x2, L.z2]] as const) scene.add(box(0.3, L.h, 0.3, '#6f4a32', x, L.h / 2, z));
+    for (const t of [CHESS_TABLE, CARDS_TABLE]) {
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 6), glow('#ffe2a8', 2.4));
+      lamp.position.set(t.x, L.h - 1, t.z);
+      scene.add(lamp);
+      const light = new THREE.PointLight('#ffd9a0', 45, 14, 1.8);
+      light.position.set(t.x, L.h - 1.2, t.z);
+      scene.add(light);
+    }
+    const sign = textSprite('GAMES LOUNGE · sit at a table to play', 0.55);
+    sign.position.set(cx, L.h + 1.1, L.z1);
+    scene.add(sign);
+
+    // Chess table with a checkered top.
+    const C = CHESS_TABLE;
+    scene.add(box(1.5, 0.1, 1.5, '#5e3e29', C.x, 0.9, C.z), box(0.3, 0.86, 0.3, '#5e3e29', C.x, 0.43, C.z));
+    for (let i = 0; i < 8; i++)
+      for (let j = 0; j < 8; j++) {
+        const sq = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.15), mat((i + j) % 2 ? '#ead9b8' : '#7a5236'));
+        sq.rotation.x = -Math.PI / 2;
+        sq.position.set(C.x - 0.525 + i * 0.15, 0.956, C.z - 0.525 + j * 0.15);
+        scene.add(sq);
+      }
+    const chessLabel = textSprite('Chess', 0.4);
+    chessLabel.position.set(C.x, 2.6, C.z);
+    scene.add(chessLabel);
+
+    // Round card table with a felt top.
+    const K = CARDS_TABLE;
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(K.r, K.r, 0.12, 24), mat('#2f7d55'));
+    top.position.set(K.x, 0.9, K.z);
+    top.castShadow = true;
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(K.r + 0.08, K.r + 0.08, 0.08, 24), mat('#5e3e29'));
+    rim.position.set(K.x, 0.86, K.z);
+    scene.add(top, rim, box(0.4, 0.84, 0.4, '#5e3e29', K.x, 0.42, K.z));
+    const cardsLabel = textSprite('Last Card', 0.4);
+    cardsLabel.position.set(K.x, 2.6, K.z);
+    scene.add(cardsLabel);
+
+    for (const seat of SEATS.filter((s) => s.group === 'chess' || s.group === 'cards')) {
+      const chair = new THREE.Group();
+      const color = seat.id === 'chess:0' ? '#f2efe6' : seat.id === 'chess:1' ? '#2f2a36' : '#c9a26b';
+      chair.add(box(0.7, 0.12, 0.7, color, 0, 0.5, 0), box(0.7, 0.7, 0.1, color, 0, 0.85, -0.33));
+      for (const dx of [-0.28, 0.28]) for (const dz of [-0.28, 0.28]) chair.add(box(0.08, 0.5, 0.08, '#8a6a44', dx, 0.25, dz));
+      chair.position.set(seat.x, 0, seat.z);
+      chair.rotation.y = seat.ry;
+      scene.add(chair);
+    }
+
+    const soon = textSprite('More tables coming: poker, Werewolf, a property game', 0.4);
+    soon.position.set(cx, 2.4, L.z2 - 2.4);
+    scene.add(soon);
   }
 
   // ------------------------------------------------------------ shared

@@ -96,7 +96,12 @@ export interface Seat {
 }
 
 /** Sitting in one of these groups opens the face grid with everyone else seated there. */
-export const GRID_GROUPS = ['lounge', 'dining'];
+export const GRID_GROUPS = ['lounge', 'dining', 'chess', 'cards'];
+
+/** The games lounge (south-east), with its sit-down game tables. */
+export const GAMES_LOUNGE = { x1: 8.6, x2: 19.4, z1: 21.6, z2: 42.6, h: 4.5 };
+export const CHESS_TABLE = { x: 12, z: 26 };
+export const CARDS_TABLE = { x: 14.5, z: 34.5, r: 1.5 };
 
 export const SEATS: Seat[] = [];
 
@@ -124,6 +129,35 @@ for (let row = 0; row < 2; row++) {
   }
 }
 
+// Chess: White and Black face each other; two more chairs for people watching.
+SEATS.push({ id: 'chess:0', group: 'chess', x: CHESS_TABLE.x - 1.5, z: CHESS_TABLE.z, ry: Math.PI / 2 });
+SEATS.push({ id: 'chess:1', group: 'chess', x: CHESS_TABLE.x + 1.5, z: CHESS_TABLE.z, ry: -Math.PI / 2 });
+SEATS.push({ id: 'chess:2', group: 'chess', x: CHESS_TABLE.x, z: CHESS_TABLE.z - 1.5, ry: 0 });
+SEATS.push({ id: 'chess:3', group: 'chess', x: CHESS_TABLE.x, z: CHESS_TABLE.z + 1.5, ry: Math.PI });
+// Card table: eight chairs in a ring.
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2;
+  SEATS.push({
+    id: `cards:${i}`,
+    group: 'cards',
+    x: CARDS_TABLE.x + Math.sin(a) * (CARDS_TABLE.r + 0.85),
+    z: CARDS_TABLE.z + Math.cos(a) * (CARDS_TABLE.r + 0.85),
+    ry: a + Math.PI,
+  });
+}
+
+/** A short description of a seat for the "press E" prompt. */
+export const seatLabel = (id: string) =>
+  id === 'chess:0'
+    ? 'sit down to play White'
+    : id === 'chess:1'
+      ? 'sit down to play Black'
+      : id.startsWith('chess')
+        ? 'sit down to watch the chess'
+        : id.startsWith('cards')
+          ? 'sit down at the card table'
+          : 'sit down';
+
 export const seatGroup = (seatId: string | null) => (seatId ? seatId.split(':')[0] : null);
 
 /** Solid boxes you can't walk through: centre plus half-sizes. */
@@ -148,9 +182,8 @@ export const PLANTS: { x: number; z: number; scale: number }[] = [
   { x: 18.4, z: 42.4, scale: 1.4 },
   { x: -32, z: -17.5, scale: 1.1 },
   { x: -32, z: 17.5, scale: 1.1 },
-  { x: 12, z: 23, scale: 1.2 },
-  { x: 17, z: 30, scale: 1 },
-  { x: 12, z: 37, scale: 1.2 },
+  { x: 17.5, z: 41, scale: 1.2 },
+  { x: 10, z: 41, scale: 1.2 },
   { x: -37, z: 26, scale: 1.2 },
   { x: -40, z: 34, scale: 1 },
   { x: -36, z: 41, scale: 1.2 },
@@ -183,7 +216,9 @@ export const COLLIDERS: Collider[] = [
   ...STATIONS.map((s) => square(s.x, s.z, STATION_HALF)),
   { x: DINING.x, z: DINING.z, hw: 0.9, hd: 2.9 },
   square(LOUNGE.x, LOUNGE.z, 1.0), // fire pit
-  ...SEATS.map((s) => square(s.x, s.z, s.group === 'dining' ? 0.4 : 0.6)),
+  ...SEATS.map((s) => square(s.x, s.z, s.group === 'lounge' || s.group === 'cinema' ? 0.6 : 0.4)),
+  square(CHESS_TABLE.x, CHESS_TABLE.z, 0.75),
+  square(CARDS_TABLE.x, CARDS_TABLE.z, CARDS_TABLE.r * 0.8),
   ...PLANTS.map((p) => square(p.x, p.z, 0.42 * p.scale)),
   ...MASTS.map((m) => square(m.x, m.z, 0.3)),
   ...PERGOLA_POSTS.map((p) => square(p.x, p.z, 0.2)),

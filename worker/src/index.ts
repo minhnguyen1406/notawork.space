@@ -13,6 +13,7 @@ import {
 } from '../../shared/protocol';
 import { BOUNDS, SEATS, SPAWN, SPOTS, STATIONS } from '../../shared/layout';
 import { ballMoving, centreBall, MAX_KICK, stepBall } from '../../shared/ball';
+import { Tables } from './tables';
 import { actStation, newKitchen, useStation, type KitchenState } from '../../shared/kitchen';
 
 export interface Env {
@@ -65,6 +66,13 @@ export class Room extends DurableObject<Env> {
   private ticks = 0;
   private games: GamesState = { ball: centreBall(), score: [0, 0], laps: [] };
   private lastKicker = '';
+  private tables = new Tables({
+    sitters: () => [...this.players.values()],
+    send: (id, table, view) => {
+      for (const p of this.players.values()) if (p.id === id) this.send(p.ws, { t: 'table', table, view });
+    },
+    notice: (text) => this.broadcast({ t: 'notice', text }),
+  });
   private wheelBusyUntil = 0;
   private board: Board = { news: [], stocks: [], at: 0 };
   private boardBusy = false;
@@ -134,6 +142,9 @@ export class Room extends DurableObject<Env> {
     delete this.kitchen.held[p.id];
     this.broadcast({ t: 'leave', id: p.id });
     if (wasHolding) this.sendKitchen();
+    const seat = p.seat;
+    p.seat = null;
+    this.tables.seatChanged(p, seat);
     if (this.players.size === 0 && this.timer) {
       clearInterval(this.timer);
       this.timer = null;
@@ -206,7 +217,12 @@ export class Room extends DurableObject<Env> {
         break;
       }
 
+      case 'game':
+        if (typeof msg.table === 'string') this.tables.action(me, msg.table, msg.a);
+        break;
+
       case 'sit': {
+        const before = me.seat;
         if (msg.seat === null) {
           if (!me.seat) return;
           me.seat = null;
@@ -221,6 +237,7 @@ export class Room extends DurableObject<Env> {
           this.moved = true;
         }
         this.broadcast({ t: 'sit', id: me.id, seat: me.seat });
+        this.tables.seatChanged(me, before);
         break;
       }
 

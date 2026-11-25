@@ -9,6 +9,7 @@
     "deploy:server": "wrangler deploy --config worker/wrangler.jsonc"
   },
   "dependencies": {
+    "chess.js": "^1.4.0",
     "livekit-client": "^2.25.0",
     "three": "^0.187.0"
   },

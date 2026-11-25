@@ -50,6 +50,7 @@ export type ClientMsg =
   | { t: 'kick'; vx: number; vz: number }
   | { t: 'spot'; id: string }
   | { t: 'lap'; ms: number }
+  | { t: 'game'; table: string; a: unknown }
   | { t: 'ping' };
 
 export type ServerMsg =
@@ -74,4 +75,6 @@ export type ServerMsg =
   | { t: 'ball'; ball: BallState }
   | { t: 'score'; score: [number, number] }
   | { t: 'laps'; laps: Lap[] }
-  | { t: 'wheel'; names: string[]; winner: number };
+  | { t: 'wheel'; names: string[]; winner: number }
+  /** Your personal view of a game table you are sitting at (see shared/tables.ts). */
+  | { t: 'table'; table: string; view: unknown };

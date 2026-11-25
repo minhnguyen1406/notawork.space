@@ -22,6 +22,9 @@ import {
 } from '../shared/layout';
 import { BALL_R } from '../shared/ball';
 import { Games } from './games';
+import { TableUI } from './tables';
+import { isTable } from '../shared/tables';
+import { seatLabel } from '../shared/layout';
 import { ING_LABEL, RECIPES } from '../shared/kitchen';
 import { buildWorld } from './world';
 import { Avatar } from './avatar';
@@ -199,6 +202,9 @@ const myGridGroup = () => {
 
 // ---------------------------------------------------------------- face grid (sitting down)
 
+const tableViews = new Map<string, unknown>();
+const tableUI = new TableUI($('game'), (table, a) => send({ t: 'game', table, a }));
+
 const gridVideos: HTMLVideoElement[] = [];
 const gridTileById = new Map<string, HTMLElement>();
 
@@ -210,6 +216,10 @@ function renderGrid() {
 
   const group = myGridGroup();
   gridEl.hidden = !group;
+  // At a game table the game takes the main area and faces move to a side column.
+  gridEl.classList.toggle('game', isTable(group));
+  if (isTable(group)) tableUI.show(group, tableViews.get(group));
+  else tableUI.clear();
   if (!group) return;
 
   for (const a of avatars.values()) {
@@ -421,6 +431,10 @@ function handle(msg: ServerMsg) {
     case 'board':
       world.setBoard(msg.board);
       break;
+    case 'table':
+      tableViews.set(msg.table, msg.view);
+      if (myGridGroup() === msg.table && isTable(msg.table)) tableUI.show(msg.table, msg.view);
+      break;
     case 'ball':
       games.syncBall(msg.ball);
       break;
@@ -554,7 +568,7 @@ function nearest(): Target | null {
 }
 
 function promptFor(t: Target): string {
-  if (t.seat) return 'E — sit down';
+  if (t.seat) return `E — ${seatLabel(t.seat.id)}`;
   if (t.spot) {
     if (t.spot.id === 'wheel') return 'E — spin the wheel';
     if (t.spot.id === 'score') return 'E — reset the score to 0 – 0';
