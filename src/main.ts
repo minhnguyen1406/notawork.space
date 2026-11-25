@@ -406,7 +406,7 @@ function handle(msg: ServerMsg) {
       renderMenu();
       $('join').hidden = true;
       $('hud').hidden = false;
-      logLine('You came in. Press Enter to chat.');
+      logLine('You came in. Press Enter to chat, H for the guide.');
       if (msg.media) void startMedia(msg.media.url, msg.media.token);
       else logLine('Voice and video are not set up on this server yet.');
       break;
@@ -665,6 +665,8 @@ addEventListener('keydown', (e) => {
   }
   if (!me || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target instanceof HTMLInputElement) return;
+  // With the guide open, only the keys that close it do anything.
+  if (!guideEl.hidden && e.code !== 'KeyH' && e.code !== 'Escape') return;
   switch (e.code) {
     case 'Enter':
       if (e.target instanceof HTMLButtonElement) return; // let Enter press the focused button
@@ -702,12 +704,32 @@ addEventListener('keydown', (e) => {
         applyMic();
       }
       return;
+    case 'KeyH':
+      if (!e.repeat) toggleGuide();
+      return;
     case 'Escape':
       closeTheater();
+      toggleGuide(false);
       return;
   }
   keys.add(e.code);
 });
+// The full guide. The bottom line keeps only the keys you need all the time.
+const guideEl = $('guide');
+function toggleGuide(open = guideEl.hidden) {
+  guideEl.hidden = !open;
+  if (open) {
+    keys.clear();
+    releaseTalk();
+    $('guide-close').focus();
+  }
+}
+$('btn-guide').onclick = () => toggleGuide();
+$('guide-close').onclick = () => toggleGuide(false);
+guideEl.addEventListener('pointerdown', (e) => {
+  if (e.target === guideEl) toggleGuide(false); // click outside the card
+});
+
 function emote(k: string) {
   send({ t: 'emote', k });
   if (k !== 'zzz') play('pop');

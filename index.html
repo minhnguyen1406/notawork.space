@@ -34,6 +34,7 @@
         <button id="btn-cam" type="button">Camera off</button>
         <button id="btn-share" type="button">Share screen</button>
         <button id="btn-theater" type="button" hidden>Watch full screen</button>
+        <button id="btn-guide" type="button">Guide</button>
       </div>
       <div id="chat">
         <div id="chat-log" aria-live="polite"></div>
@@ -43,7 +44,7 @@
       <div id="prompt" hidden></div>
       <div id="toast" hidden></div>
       <div id="timer" class="pill" hidden></div>
-      <div id="help">WASD to move · Shift to run · drag to look · E to use or sit · F to chop · hold V to talk · M to toggle mic · 1–6 to react · 7 to dance</div>
+      <div id="help">WASD to move · Shift to run · drag to look · E to use or sit · F to chop · hold V to talk · M to toggle mic · 1–6 to react · H for the full guide</div>
     </div>
 
     <div id="grid" hidden>
@@ -56,6 +57,81 @@
 
     <div id="theater" hidden>
       <button id="theater-close" type="button">Close</button>
+    </div>
+
+    <div id="guide" class="overlay" hidden>
+      <div class="guide-card" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+        <header>
+          <h2 id="guide-title">The full guide</h2>
+          <button id="guide-close" type="button">Close</button>
+        </header>
+        <div class="guide-body">
+          <section>
+            <h3>Getting around</h3>
+            <dl>
+              <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows</dt><dd>Walk</dd>
+              <dt><kbd>Shift</kbd></dt><dd>Run</dd>
+              <dt>Drag the mouse</dt><dd>Look around</dd>
+              <dt>Scroll</dt><dd>Zoom in and out</dd>
+              <dt><kbd>E</kbd></dt><dd>Use, sit down or stand up. A prompt shows what E will do.</dd>
+            </dl>
+          </section>
+          <section>
+            <h3>Talking</h3>
+            <dl>
+              <dt>Hold <kbd>V</kbd></dt><dd>Talk while you hold it</dd>
+              <dt><kbd>M</kbd> or the Mic button</dt><dd>Leave the mic on; press again to mute</dd>
+              <dt>Camera button</dt><dd>Your face appears in a bubble over your head</dd>
+              <dt><kbd>Enter</kbd></dt><dd>Type in chat</dd>
+            </dl>
+            <p>Voices get quieter with distance: full volume within 3 metres, silent past 12. People sitting at the same table or round the fire always hear and see each other in full.</p>
+          </section>
+          <section>
+            <h3>Watching together</h3>
+            <p><b>Share screen</b> puts a window or tab on the big cinema screen for everyone. <b>Watch full screen</b> fills your window with it; <kbd>Esc</kbd> closes. One person shares at a time.</p>
+            <p>To share sound, use Chrome or Edge, pick a browser tab and tick “share tab audio”. Netflix and similar services show a black screen when shared.</p>
+          </section>
+          <section>
+            <h3>Reactions</h3>
+            <dl>
+              <dt><kbd>1</kbd>–<kbd>6</kbd></dt><dd>👋 😂 ❤️ 🔥 👏 💀 over your head</dd>
+              <dt><kbd>7</kbd></dt><dd>Dance</dd>
+            </dl>
+            <p>This is not a workspace. Mention work in chat and the alarm goes off.</p>
+          </section>
+          <section>
+            <h3>Kitchen</h3>
+            <dl>
+              <dt><kbd>E</kbd></dt><dd>Take an ingredient or plate, put things down, cook, serve</dd>
+              <dt><kbd>F</kbd></dt><dd>Chop at a chopping board</dd>
+            </dl>
+            <p>Chop tomato and lettuce, cook patties and eggs, build a dish on a plate and carry it to “Serve here”. The menu shows on the left while you are in the kitchen. Nothing is timed.</p>
+          </section>
+          <section>
+            <h3>Outdoor games</h3>
+            <dl>
+              <dt>Football</dt><dd>Walk or run into the ball to kick it. <kbd>E</kbd> at the scoreboard resets the score.</dd>
+              <dt>Lap race</dt><dd><kbd>E</kbd> at Gate 1, then run through the gates in order.</dd>
+              <dt>Picker wheel</dt><dd><kbd>E</kbd> beside it picks someone in the room at random.</dd>
+            </dl>
+          </section>
+          <section>
+            <h3>Table games</h3>
+            <p>Sit down with <kbd>E</kbd> and the game opens. Each one has its rules on screen. Stand up with <kbd>E</kbd>.</p>
+            <dl>
+              <dt>Chess</dt><dd>Two players, plus seats to watch</dd>
+              <dt>Last Card</dt><dd>Get rid of your cards first. Two or more players.</dd>
+              <dt>Poker</dt><dd>Texas Hold’em with play chips. Two or more players.</dd>
+              <dt>Werewolf</dt><dd>Five to twelve players round the far fire</dd>
+              <dt>Phố Lớn</dt><dd>Buy cities, collect rent. Two to six players.</dd>
+            </dl>
+          </section>
+          <section>
+            <h3>On the walls</h3>
+            <p>Beside the cinema screen: world and Vietnam headlines on the left, US markets on the right, refreshed every ten minutes. The yellow board counts the minutes since anyone mentioned work.</p>
+          </section>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
