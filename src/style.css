@@ -1025,3 +1025,21 @@ kbd {
   width: 4px;
   height: 4px;
 }
+
+/* Connection info (press I) */
+#info {
+  position: fixed;
+  left: 14px;
+  bottom: 60px;
+  margin: 0;
+  padding: 12px 14px;
+  max-width: min(520px, calc(100vw - 28px));
+  background: rgba(10, 8, 14, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #d8f5c8;
+  white-space: pre-wrap;
+  z-index: 26;
+  pointer-events: none;
+}

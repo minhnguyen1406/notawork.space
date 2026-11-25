@@ -5,7 +5,9 @@ import {
   Track,
   VideoPresets,
   VideoQuality,
+  type LocalVideoTrack,
   type Participant,
+  type RemoteVideoTrack,
   type RemoteTrackPublication,
   type TrackPublication,
 } from 'livekit-client';
@@ -217,6 +219,36 @@ export class Media {
   }
   get sharingMyScreen() {
     return this.screenOwner === this.myId;
+  }
+
+  private lastFrames = { at: 0, n: 0 };
+
+  /** Plain-language lines about the voice connection and any share, for the info panel. */
+  async info(): Promise<string[]> {
+    const r = this.room;
+    const lines = [`Voice connection: ${r.state}`, `People on voice: ${r.remoteParticipants.size + 1}`];
+    const mine = r.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.track;
+    if (mine && 'getSenderStats' in mine) {
+      lines.push(`You are sharing${this.sharingSound ? ' with sound' : ' WITHOUT sound'}`);
+      for (const s of await (mine as LocalVideoTrack).getSenderStats()) {
+        lines.push(`  sending ${s.frameWidth}×${s.frameHeight} at ${Math.round(s.framesPerSecond ?? 0)} fps, target ${Math.round((s.targetBitrate ?? 0) / 1000)} kbps`);
+        if (s.qualityLimitationReason && s.qualityLimitationReason !== 'none') lines.push(`  held back by: ${s.qualityLimitationReason}`);
+      }
+    } else if (this.screenOwner) {
+      const pub = r.remoteParticipants.get(this.screenOwner)?.getTrackPublication(Track.Source.ScreenShare);
+      const track = pub?.track as RemoteVideoTrack | undefined;
+      const s = await track?.getReceiverStats();
+      lines.push(`Watching a share from ${pub ? r.remoteParticipants.get(this.screenOwner)?.name ?? 'someone' : 'someone'}`);
+      if (s) {
+        const now = performance.now();
+        const fps = this.lastFrames.at ? ((s.framesDecoded - this.lastFrames.n) * 1000) / (now - this.lastFrames.at) : 0;
+        this.lastFrames = { at: now, n: s.framesDecoded };
+        lines.push(`  receiving ${s.frameWidth ?? '?'}×${s.frameHeight ?? '?'} at ${Math.max(0, Math.round(fps))} fps`);
+        lines.push(`  lost packets ${s.packetsLost ?? 0}, dropped frames ${s.framesDropped}, codec ${s.mimeType?.replace('video/', '') ?? '?'}`);
+      } else lines.push('  no video arriving yet');
+      lines.push(`  share sound: ${this.screenAudio ? `arriving, volume ${Math.round(this.screenAudio.volume * 100)}%` : 'none'}`);
+    } else lines.push('Nobody is sharing');
+    return lines;
   }
 
   /** A snapshot for the automated tests. */

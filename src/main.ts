@@ -706,6 +706,9 @@ addEventListener('keydown', (e) => {
         applyMic();
       }
       return;
+    case 'KeyI':
+      if (!e.repeat) toggleInfo();
+      return;
     case 'KeyH':
       if (!e.repeat) toggleGuide();
       return;
@@ -716,6 +719,33 @@ addEventListener('keydown', (e) => {
   }
   keys.add(e.code);
 });
+// Info panel (press I): which version this browser runs and what the voice and share links are
+// doing. Made for screenshots when something looks wrong.
+const infoEl = $('info');
+let infoTimer = 0;
+let fpsCount = 0;
+async function refreshInfo() {
+  const fps = fpsCount / 2;
+  fpsCount = 0;
+  const lines = [
+    `Version: ${__BUILD__}`,
+    `Browser: ${navigator.userAgent.match(/(Firefox|Edg|OPR|Chrome|Safari)\/[\d.]+/)?.[0].replace('Edg', 'Edge') ?? navigator.userAgent}`,
+    `Room connection: ${ws?.readyState === WebSocket.OPEN ? 'open' : 'CLOSED'} · ${avatars.size} here`,
+    `3D picture: ${Math.round(fps)} fps`,
+    ...(media ? await media.info() : ['Voice connection: not connected']),
+  ];
+  infoEl.textContent = lines.join('\n');
+}
+function toggleInfo() {
+  infoEl.hidden = !infoEl.hidden;
+  clearInterval(infoTimer);
+  if (!infoEl.hidden) {
+    infoEl.textContent = 'Measuring…';
+    fpsCount = 0;
+    infoTimer = window.setInterval(() => void refreshInfo(), 2000);
+  }
+}
+
 // The full guide. The bottom line keeps only the keys you need all the time.
 const guideEl = $('guide');
 function toggleGuide(open = guideEl.hidden) {
@@ -972,7 +1002,9 @@ function frame(nowMs: number) {
           near.set(id, { dist: Math.hypot(a.x - me.x, a.z - me.z), together: !!group && seatGroup(a.seat) === group });
         }
         const toScreen = Math.hypot(me.x - SCREEN.x, me.z - SCREEN.z);
-        media.screenVolume = theaterEl.hidden ? Math.max(0, Math.min(1, 1 - (toScreen - 13) / 12)) : 1;
+        // Full volume in and around the cinema, fading with distance but never silent: at the far end of
+        // the roof a film is still faintly audible, so nobody thinks the sound is broken.
+        media.screenVolume = theaterEl.hidden ? Math.max(0.15, Math.min(1, 1 - (toScreen - 16) / 30)) : 1;
         media.updateProximity(near);
       }
       // The recipe list only shows while you are standing in the kitchen.
@@ -1006,5 +1038,6 @@ function frame(nowMs: number) {
   games.update(time, dt);
   world.update(time, dt);
   composer.render();
+  fpsCount++;
 }
 requestAnimationFrame(frame);
