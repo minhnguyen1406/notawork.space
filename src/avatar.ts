@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { PlayerInfo } from '../shared/protocol';
+import { characterFor, makeCharacter, type Character } from './characters';
 
 const SKIN = ['#f3cfae', '#e3b185', '#c98d5c', '#93603f'];
 const HAIR = ['#2b1d16', '#4a2f1d', '#141218', '#7a4a22', '#c9a15a'];
@@ -84,6 +85,13 @@ export class Avatar {
   private tz: number;
   private try_: number;
   private inner = new THREE.Group();
+  /** The stand-in body made of simple shapes. */
+  private rough = new THREE.Group();
+  private character: Character | null = null;
+  private gone = false;
+  private lastX = 0;
+  private lastZ = 0;
+  private pace = 0;
   private legs: THREE.Object3D[] = [];
   private arms: THREE.Object3D[] = [];
   private phase = 0;
@@ -138,6 +146,25 @@ export class Avatar {
     this.inner.traverse((o) => {
       if (o instanceof THREE.Mesh) o.castShadow = true;
     });
+
+    // The simple shapes above are a stand-in: they show at once, and give way to the animated
+    // character model as soon as it has loaded (or stay, if it can't be fetched).
+    this.rough.add(...this.inner.children);
+    this.inner.add(this.rough);
+    void makeCharacter(characterFor(info.id, info.name))
+      .then((c) => {
+        if (this.gone) return;
+        this.character = c;
+        this.rough.visible = false;
+        this.inner.add(c.root);
+      })
+      .catch((err) => console.warn('character model unavailable, keeping the simple one', err));
+
+    // A ring in your chosen colour, so friends can tell who is who at a glance.
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 32), new THREE.MeshBasicMaterial({ color: info.color, transparent: true, opacity: 0.85 }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.035;
+    this.group.add(ring);
 
     this.hold.position.set(0, 1.0, 0.62);
     this.inner.add(this.hold);
@@ -284,6 +311,24 @@ export class Avatar {
     const now = performance.now();
     // Dancing: spin, bounce, arms in the air.
     const dancing = now < this.danceUntil && !sitting && !this.walking;
+
+    // The animated model: pick the animation that matches what this person is doing.
+    if (this.character) {
+      const moved = Math.hypot(this.x - this.lastX, this.z - this.lastZ) / Math.max(dt, 0.001);
+      this.pace += (moved - this.pace) * Math.min(1, dt * 8);
+      const c = this.character;
+      // The sitting animation sits on the ground, so lift the model onto whatever it is sitting on.
+      const perch = !sitting ? 0 : this.seat!.startsWith('cinema') ? 0.42 : this.seat!.startsWith('lounge') ? 0.62 : 0.74;
+      c.root.position.y += (perch - c.root.position.y) * Math.min(1, dt * 12);
+      if (sitting) c.play('sit');
+      else if (dancing) c.play('emote-yes', 1.8);
+      else if (this.walking) this.pace > 6.6 ? c.play('sprint', 1.15) : c.play('walk', Math.max(0.7, this.pace / 4.2));
+      else if (this.hold.children.length) c.play('holding-both');
+      else c.play('idle');
+      c.mixer.update(dt);
+    }
+    this.lastX = this.x;
+    this.lastZ = this.z;
     if (dancing) {
       const t = now / 1000;
       this.inner.rotation.y = Math.sin(t * 5) * 0.9;
@@ -340,8 +385,12 @@ export class Avatar {
   }
 
   dispose() {
+    this.gone = true;
     this.setVideo(null);
     this.group.removeFromParent();
+    this.character?.mixer.stopAllAction();
+    // The model's geometry is shared by everyone using that character, so leave it alone.
+    this.character?.root.removeFromParent();
     this.group.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
       if (o instanceof THREE.Sprite) {

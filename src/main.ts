@@ -78,7 +78,7 @@ const composer = new EffectComposer(
   new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }),
 );
 composer.addPass(new RenderPass(world.scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.7, 1.0));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.6, 1.0));
 composer.addPass(new OutputPass());
 
 /** How many real pixels are drawn per screen pixel. Lowered automatically on slow machines (see adaptQuality). */

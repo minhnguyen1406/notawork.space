@@ -5,5 +5,6 @@ redistributed freely. Credit is given anyway.
 
 | Files | What | Source | Licence |
 |---|---|---|---|
-| `public/sky/dusk-rooftop.jpg`, `public/sky/dusk-rooftop-1k.hdr` | 360° sky and skyline, and the lighting taken from it | "Joburg Central Sunset" by Dimitrios Savva and Greg Zaal, [Poly Haven](https://polyhaven.com/a/sunset_jhbcentral) | CC0 |
+| `public/sky/dusk-sky.jpg`, `public/sky/dusk-sky-1k.hdr` | 360° sunset sky, and the lighting taken from it | "Belfast Sunset (Pure Sky)", [Poly Haven](https://polyhaven.com/a/belfast_sunset_puresky) | CC0 |
+| `public/characters/*` | Animated people and the robot | "Mini Characters" by [Kenney](https://kenney.nl/assets/mini-characters) | CC0 |
 | `public/deck/*.jpg` | Wood decking (colour, normal, roughness) | "Wood Floor Deck", [Poly Haven](https://polyhaven.com/a/wood_floor_deck) | CC0 |

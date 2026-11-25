@@ -179,66 +179,195 @@ function stars() {
   );
 }
 
-/** Distant towers with lit windows, all around the roof. */
-function skyline() {
+/** Things in the skyline that move or blink, advanced each frame. */
+interface SkylineLife {
+  group: THREE.Group;
+  update(time: number): void;
+}
+
+/**
+ * A modern city around the roof: glass towers that mirror the evening sky, lit floors, neon edge
+ * lighting, crowns and spires, and a little air traffic drifting between them.
+ */
+function skyline(): SkylineLife {
   const g = new THREE.Group();
-  const windowTexture = (seed: number) => {
+  let s = 42;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+
+  // One tile of facade: `lit` paints the windows that are on (used as the glow), otherwise the
+  // glass itself with faint floor lines.
+  const facade = (seed: number, lit: boolean, warm: number) => {
     const c = document.createElement('canvas');
-    c.width = 64;
-    c.height = 128;
+    c.width = 128;
+    c.height = 256;
     const x = c.getContext('2d')!;
-    x.fillStyle = '#16131f';
-    x.fillRect(0, 0, 64, 128);
-    let s = seed;
-    const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-    for (let row = 0; row < 16; row++)
-      for (let col = 0; col < 6; col++) {
-        const r = rnd();
-        if (r < 0.42) continue;
-        x.fillStyle = r > 0.9 ? '#9fd0ff' : r > 0.62 ? '#ffd78a' : '#7a5a34';
-        x.fillRect(5 + col * 10, 4 + row * 8, 5, 4);
+    let q = seed;
+    const r = () => ((q = (q * 16807) % 2147483647) / 2147483647);
+    x.fillStyle = lit ? '#000' : '#1a2733';
+    x.fillRect(0, 0, 128, 256);
+    const cols = 8;
+    const rows = 32;
+    for (let row = 0; row < rows; row++) {
+      // Whole floors are often lit or dark together, as in a real office tower.
+      const floor = r();
+      for (let col = 0; col < cols; col++) {
+        const on = floor > 0.72 ? r() > 0.25 : floor > 0.3 ? r() > 0.62 : r() > 0.93;
+        if (lit) {
+          if (!on) continue;
+          const v = r();
+          x.fillStyle = v < warm ? (v < warm * 0.5 ? '#ffd9a0' : '#ffbe73') : v < 0.93 ? '#bfe3ff' : '#8ff5e6';
+          x.globalAlpha = 0.55 + r() * 0.45;
+          x.fillRect(col * 16 + 2, row * 8 + 2, 12, 4.5);
+        } else {
+          x.globalAlpha = 1;
+          x.fillStyle = on ? '#243847' : '#16222c';
+          x.fillRect(col * 16 + 1, row * 8 + 1, 14, 6);
+        }
       }
+    }
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.magFilter = THREE.NearestFilter;
+    t.anisotropy = 4;
     return t;
   };
-  const base = [windowTexture(7), windowTexture(91), windowTexture(1234)];
-  let s = 42;
-  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 90; i++) {
-    const angle = (i / 90) * Math.PI * 2 + rnd() * 0.05;
-    const dist = 85 + rnd() * 110;
-    const w = 9 + rnd() * 14;
-    const d = 9 + rnd() * 14;
-    const top = -14 + rnd() * rnd() * 62; // most are below the roof, a few tower over it
-    const h = top + 90;
-    const tex = base[i % 3].clone();
-    tex.repeat.set(Math.round(w / 6), Math.round(h / 12));
-    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ map: tex }));
-    b.position.set(Math.sin(angle) * dist, top - h / 2, Math.cos(angle) * dist);
-    g.add(b);
-    if (top > 24 && i % 2 === 0) {
-      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.5, 6, 5), glow('#ff4040', 3));
-      beacon.position.set(b.position.x, top + 0.8, b.position.z);
-      g.add(beacon);
+  const skins = [0, 1, 2, 3].map((k) => ({ glass: facade(11 + k * 97, false, 0), lights: facade(11 + k * 97, true, [0.7, 0.35, 0.55, 0.15][k]) }));
+  const tints = ['#5d8fb0', '#7fa3b8', '#4f7f9c', '#8c9fb5', '#6a8ea6'];
+  const neons = ['#39e6ff', '#ff4fd8', '#ffb347', '#7dffb0', '#9d7bff'];
+
+  /** Glass that reflects the sky, with its lit floors glowing through. */
+  const glassFor = (w: number, h: number, far: boolean) => {
+    const skin = skins[Math.floor(rnd() * skins.length)];
+    const glass = skin.glass.clone();
+    const lights = skin.lights.clone();
+    for (const t of [glass, lights]) t.repeat.set(Math.max(1, Math.round(w / 9)), Math.max(1, Math.round(h / 26)));
+    return new THREE.MeshStandardMaterial({
+      color: tints[Math.floor(rnd() * tints.length)],
+      map: glass,
+      metalness: far ? 0.6 : 0.92,
+      roughness: far ? 0.45 : 0.16 + rnd() * 0.14,
+      emissive: '#ffffff',
+      emissiveMap: lights,
+      emissiveIntensity: far ? 0.55 : 0.95,
+    });
+  };
+
+  const beacons: THREE.Mesh[] = [];
+  const DEPTH = 150; // how far the towers continue below the roof
+
+  const tower = (x: number, z: number, top: number, w: number, far: boolean) => {
+    const kind = rnd();
+    const neon = neons[Math.floor(rnd() * neons.length)];
+    const h = top + DEPTH;
+    const place = (m: THREE.Object3D, y: number) => {
+      m.position.set(x, y, z);
+      g.add(m);
+    };
+    let crownY = top;
+    let crownR = w / 2;
+    if (kind < 0.38) {
+      // Stepped tower: two or three tiers, each narrower than the one below.
+      const tiers = 2 + Math.floor(rnd() * 2);
+      let y0 = -DEPTH;
+      let tw = w;
+      for (let i = 0; i < tiers; i++) {
+        const th = i === tiers - 1 ? top - y0 : (h * (0.5 + rnd() * 0.15)) / (i + 1);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(tw, th, tw * (0.8 + rnd() * 0.4)), glassFor(tw, th, far));
+        m.rotation.y = rnd() * 0.5;
+        place(m, y0 + th / 2);
+        y0 += th;
+        crownR = tw / 2;
+        tw *= 0.72;
+      }
+    } else if (kind < 0.66) {
+      // Round tower, slightly tapered.
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.42, w * 0.56, h, 20, 1), glassFor(w * 3, h, far));
+      place(m, top - h / 2);
+      crownR = w * 0.42;
+    } else if (kind < 0.86) {
+      // Slender blade, wide one way and thin the other.
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w * 1.25, h, w * 0.5), glassFor(w * 1.25, h, far));
+      m.rotation.y = rnd() * Math.PI;
+      place(m, top - h / 2);
+    } else {
+      // Tapered to a point.
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.12, w * 0.6, h, 4, 1), glassFor(w * 2.4, h, far));
+      m.rotation.y = rnd() * Math.PI;
+      place(m, top - h / 2);
+      crownR = w * 0.12;
     }
+    if (far) return;
+
+    // Neon edge lighting running up two corners.
+    if (rnd() < 0.55) {
+      for (const side of [-1, 1]) {
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(0.35, Math.min(h, top + 40), 0.35), glow(neon, 1.9));
+        strip.position.set(x + side * crownR * 0.98, top - Math.min(h, top + 40) / 2, z + side * crownR * 0.98);
+        g.add(strip);
+      }
+    }
+    // A lit crown.
+    if (rnd() < 0.6) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(crownR * 1.05, 0.28, 6, 28), glow(neon, 2.2));
+      ring.rotation.x = Math.PI / 2;
+      place(ring, crownY + 0.4);
+    }
+    // A spire with an aircraft warning light on the tallest ones.
+    if (top > 34 && rnd() < 0.7) {
+      const spire = 10 + rnd() * 16;
+      place(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.5, spire, 6), mat('#27313a')), crownY + spire / 2);
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), glow('#ff3b3b', 3));
+      beacon.userData.phase = rnd() * 6;
+      place(beacon, crownY + spire + 0.4);
+      beacons.push(beacon);
+    }
+  };
+
+  // Three rings: a few close giants, a dense middle distance, and a hazy far layer.
+  const ring = (count: number, near: number, deep: number, tall: number, far: boolean) => {
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + rnd() * 0.12;
+      const dist = near + rnd() * deep;
+      // Most reach about roof height; a few soar.
+      const top = -18 + rnd() * rnd() * tall + (rnd() < 0.18 ? tall * 0.5 : 0);
+      tower(Math.sin(angle) * dist, Math.cos(angle) * dist, top, 11 + rnd() * 13, far);
+    }
+  };
+  ring(22, 78, 34, 70, false);
+  ring(40, 125, 70, 95, false);
+  ring(60, 215, 130, 130, true);
+
+  // Air traffic: small lights gliding along lanes between the towers.
+  const craft: { m: THREE.Mesh; r: number; y: number; speed: number; phase: number }[] = [];
+  for (let i = 0; i < 26; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.42, 6, 5), glow(i % 3 ? '#ffe9b0' : '#ff5a5a', 3));
+    g.add(m);
+    craft.push({ m, r: 95 + rnd() * 150, y: 14 + rnd() * 60, speed: (rnd() < 0.5 ? 1 : -1) * (0.012 + rnd() * 0.03), phase: rnd() * 6.28 });
   }
-  return g;
+
+  return {
+    group: g,
+    update(time) {
+      for (const c of craft) {
+        const a = c.phase + time * c.speed;
+        c.m.position.set(Math.sin(a) * c.r, c.y + Math.sin(time * 0.2 + c.phase) * 2, Math.cos(a) * c.r);
+      }
+      for (const b of beacons) b.visible = (time * 0.8 + b.userData.phase) % 2.4 < 1.5;
+    },
+  };
 }
 
 const ASSETS = import.meta.env.BASE_URL;
 
 /**
- * A real rooftop at dusk: a 360° photograph for the sky and skyline, and a high-dynamic-range copy
- * of it to light the scene, so surfaces pick up the same pinks and blues. (Poly Haven "Joburg
- * Central Sunset", CC0.) The painted stand-ins are removed once it has loaded.
+ * A real sunset sky: a 360° photograph behind everything, and a high-dynamic-range copy of it to
+ * light the scene, so the deck, furniture and glass towers all pick up the same evening colours.
+ * (Poly Haven "Belfast Sunset (Pure Sky)", CC0.) The painted stand-ins are removed once it loads.
  */
 function loadSky(scene: THREE.Scene, standIns: THREE.Object3D[], hemi: THREE.HemisphereLight, sun: THREE.DirectionalLight) {
   // Turn the photograph so its sunset glow sits to the north, behind the cinema screen.
   const turn = SKY_TURN;
-  new THREE.TextureLoader().load(`${ASSETS}sky/dusk-rooftop.jpg`, (tex) => {
+  new THREE.TextureLoader().load(`${ASSETS}sky/dusk-sky.jpg`, (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     tex.colorSpace = THREE.SRGBColorSpace;
     scene.background = tex;
@@ -246,13 +375,13 @@ function loadSky(scene: THREE.Scene, standIns: THREE.Object3D[], hemi: THREE.Hem
     scene.backgroundIntensity = 0.9;
     for (const o of standIns) o.removeFromParent();
   });
-  new HDRLoader().load(`${ASSETS}sky/dusk-rooftop-1k.hdr`, (tex) => {
+  new HDRLoader().load(`${ASSETS}sky/dusk-sky-1k.hdr`, (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     scene.environment = tex;
     scene.environmentRotation.y = turn;
-    scene.environmentIntensity = 0.7;
+    scene.environmentIntensity = 0.5;
     // The sky now does most of the ambient lighting, so the simple fill light steps back.
-    hemi.intensity = 0.35;
+    hemi.intensity = 0.3;
     sun.intensity = 0.9;
   });
 }
@@ -286,12 +415,12 @@ function deckMaterial(metresWide: number, metresDeep: number) {
 
 export function buildWorld(): World {
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog('#6f6c86', 90, 360);
-  // Until the photographed sky arrives (or if it can't be fetched) a painted dusk sky and a
-  // simple skyline stand in.
+  scene.fog = new THREE.Fog('#77779a', 170, 620);
+  // Until the photographed sky arrives (or if it can't be fetched) a painted dusk sky stands in.
   const city = skyline();
-  city.position.set(CENTRE.x, 0, CENTRE.z);
-  const standIns = [sky(), stars(), city];
+  city.group.position.set(CENTRE.x, 0, CENTRE.z);
+  scene.add(city.group);
+  const standIns = [sky(), stars()];
   scene.add(...standIns);
 
   // --- Light: cool sky above, warm bounce below, and the last of the sun low behind the cinema,
@@ -596,6 +725,7 @@ export function buildWorld(): World {
       }
       billboard.update(time);
       workSign.update();
+      city.update(time);
       for (const b of bulbs) b.scale.setScalar(1 + Math.sin(time * 2 + b.userData.phase) * 0.18);
 
       // Fire: flames lick, sparks rise, the light flickers.
