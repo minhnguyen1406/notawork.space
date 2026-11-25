@@ -16,6 +16,7 @@ import {
   SEATS,
 } from '../shared/layout';
 import { textSprite } from './avatar';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { Billboard } from './billboard';
 import { WorkSign } from './fun';
 
@@ -227,17 +228,79 @@ function skyline() {
   return g;
 }
 
+const ASSETS = import.meta.env.BASE_URL;
+
+/**
+ * A real rooftop at dusk: a 360° photograph for the sky and skyline, and a high-dynamic-range copy
+ * of it to light the scene, so surfaces pick up the same pinks and blues. (Poly Haven "Joburg
+ * Central Sunset", CC0.) The painted stand-ins are removed once it has loaded.
+ */
+function loadSky(scene: THREE.Scene, standIns: THREE.Object3D[], hemi: THREE.HemisphereLight, sun: THREE.DirectionalLight) {
+  // Turn the photograph so its sunset glow sits to the north, behind the cinema screen.
+  const turn = SKY_TURN;
+  new THREE.TextureLoader().load(`${ASSETS}sky/dusk-rooftop.jpg`, (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = tex;
+    scene.backgroundRotation.y = turn;
+    scene.backgroundIntensity = 0.9;
+    for (const o of standIns) o.removeFromParent();
+  });
+  new HDRLoader().load(`${ASSETS}sky/dusk-rooftop-1k.hdr`, (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = tex;
+    scene.environmentRotation.y = turn;
+    scene.environmentIntensity = 0.7;
+    // The sky now does most of the ambient lighting, so the simple fill light steps back.
+    hemi.intensity = 0.35;
+    sun.intensity = 0.9;
+  });
+}
+const SKY_TURN = 1.75;
+
+/** Real decking: colour, surface bumps and roughness from a photographed wood deck (Poly Haven "Wood Floor Deck", CC0). */
+function deckMaterial(metresWide: number, metresDeep: number) {
+  const material = new THREE.MeshStandardMaterial({ color: '#8f6a4b', roughness: 0.85 });
+  const loader = new THREE.TextureLoader();
+  const TILE = 3.2; // metres covered by one copy of the photograph
+  const load = (file: string, srgb: boolean, apply: (t: THREE.Texture) => void) =>
+    loader.load(`${ASSETS}deck/${file}.jpg`, (t) => {
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(metresWide / TILE, metresDeep / TILE);
+      t.anisotropy = 8;
+      if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+      apply(t);
+      material.needsUpdate = true;
+    });
+  load('color', true, (t) => {
+    material.map = t;
+    material.color.set('#b9aca1'); // a light tint: keeps the wood warm under the cool evening sky
+  });
+  load('normal', false, (t) => (material.normalMap = t));
+  load('rough', false, (t) => {
+    material.roughnessMap = t;
+    material.roughness = 1;
+  });
+  return material;
+}
+
 export function buildWorld(): World {
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog('#4a2f4e', 75, 330);
+  scene.fog = new THREE.Fog('#6f6c86', 90, 360);
+  // Until the photographed sky arrives (or if it can't be fetched) a painted dusk sky and a
+  // simple skyline stand in.
   const city = skyline();
   city.position.set(CENTRE.x, 0, CENTRE.z);
-  scene.add(sky(), stars(), city);
+  const standIns = [sky(), stars(), city];
+  scene.add(...standIns);
 
-  // --- Light: cool sky above, warm bounce below, and the last low sun from the west.
-  scene.add(new THREE.HemisphereLight('#8a8fe0', '#ffb07a', 0.95));
-  const sun = new THREE.DirectionalLight('#ff9a66', 1.25);
-  sun.position.set(CENTRE.x - 44, 26, CENTRE.z + 10);
+  // --- Light: cool sky above, warm bounce below, and the last of the sun low behind the cinema,
+  // which is where the sunset sits in the photographed sky.
+  const hemi = new THREE.HemisphereLight('#8a8fe0', '#ffb07a', 0.95);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight('#ffb38a', 1.25);
+  sun.position.set(CENTRE.x - 26, 24, CENTRE.z - 40);
+  loadSky(scene, standIns, hemi, sun);
   sun.target.position.set(CENTRE.x, 0, CENTRE.z);
   scene.add(sun.target);
   sun.castShadow = true;
@@ -262,12 +325,11 @@ export function buildWorld(): World {
   };
 
   // --- The roof: decking, the building underneath, and a parapet with lanterns.
-  const deck = new THREE.Mesh(new THREE.PlaneGeometry(W + 1, D + 1), mat('#8f6a4b'));
+  const deck = new THREE.Mesh(new THREE.PlaneGeometry(W + 1, D + 1), deckMaterial(W + 1, D + 1));
   deck.rotation.x = -Math.PI / 2;
   deck.position.set(CENTRE.x, 0, CENTRE.z);
   deck.receiveShadow = true;
   scene.add(deck);
-  for (let z = B.z1 + 1; z < B.z2; z += 1) flatRug(new THREE.PlaneGeometry(W + 1, 0.05), '#73553b', CENTRE.x, z, 0.006);
   const tower = new THREE.Mesh(new THREE.BoxGeometry(W + 1.6, 120, D + 1.6), mat('#3b2f3f'));
   tower.position.set(CENTRE.x, -60.05, CENTRE.z);
   scene.add(tower);
@@ -278,8 +340,8 @@ export function buildWorld(): World {
     [B.x1 - 0.5, CENTRE.z, 0.6, D + 1.6],
     [B.x2 + 0.5, CENTRE.z, 0.6, D + 1.6],
   ] as const) {
-    scene.add(box(w, 1.0, d, '#5a4658', x, 0.5, z));
-    scene.add(box(w + 0.2, 0.12, d + 0.2, '#7a6278', x, 1.06, z));
+    scene.add(box(w, 1.0, d, '#77737c', x, 0.5, z));
+    scene.add(box(w + 0.2, 0.12, d + 0.2, '#a9a4a8', x, 1.06, z));
   }
   const lanternGeo = new THREE.BoxGeometry(0.34, 0.44, 0.34);
   const lanternMat = glow('#ffb45e', 2.6);
