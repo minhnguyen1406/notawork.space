@@ -1,7 +1,7 @@
 // Messages and limits shared by the browser and the game server.
 import type { KitchenState } from './kitchen';
+import type { BallState } from './ball';
 
-export const ROOM_HALF = 20; // the room is a square from -20 to +20 on x and z
 export const MAX_PLAYERS = 40;
 export const MAX_NAME = 24;
 export const MAX_CHAT = 200;
@@ -26,6 +26,20 @@ export interface Board {
   at: number;
 }
 
+export interface Lap {
+  name: string;
+  ms: number;
+}
+
+/** Everything about the games that a newcomer needs to see. */
+export interface GamesState {
+  ball: BallState;
+  /** Goals for Red (defends the west goal) and Blue (defends the east goal). */
+  score: [red: number, blue: number];
+  /** Fastest laps, best first. */
+  laps: Lap[];
+}
+
 export type ClientMsg =
   | { t: 'join'; name: string; color: string; password?: string }
   | { t: 'move'; x: number; z: number; ry: number }
@@ -33,6 +47,9 @@ export type ClientMsg =
   | { t: 'sit'; seat: string | null }
   | { t: 'use'; station: string }
   | { t: 'act'; station: string }
+  | { t: 'kick'; vx: number; vz: number }
+  | { t: 'spot'; id: string }
+  | { t: 'lap'; ms: number }
   | { t: 'ping' };
 
 export type ServerMsg =
@@ -42,6 +59,7 @@ export type ServerMsg =
       players: PlayerInfo[];
       kitchen: KitchenState;
       board: Board;
+      games: GamesState;
       media: { url: string; token: string } | null;
     }
   | { t: 'denied'; reason: 'full' | 'password' }
@@ -52,4 +70,8 @@ export type ServerMsg =
   | { t: 'chat'; id: string; name: string; text: string }
   | { t: 'kitchen'; state: KitchenState }
   | { t: 'notice'; text: string }
-  | { t: 'board'; board: Board };
+  | { t: 'board'; board: Board }
+  | { t: 'ball'; ball: BallState }
+  | { t: 'score'; score: [number, number] }
+  | { t: 'laps'; laps: Lap[] }
+  | { t: 'wheel'; names: string[]; winner: number };

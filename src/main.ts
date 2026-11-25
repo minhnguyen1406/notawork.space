@@ -4,8 +4,24 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import './style.css';
-import { COLORS, ROOM_HALF, TICK_HZ, type ClientMsg, type PlayerInfo, type ServerMsg } from '../shared/protocol';
-import { COLLIDERS, GRID_GROUPS, SCREEN, SEATS, STATIONS, seatGroup, type Seat, type Station } from '../shared/layout';
+import { COLORS, TICK_HZ, type ClientMsg, type PlayerInfo, type ServerMsg } from '../shared/protocol';
+import {
+  BOUNDS,
+  COLLIDERS,
+  GRID_GROUPS,
+  RACE,
+  RACE_R,
+  SCREEN,
+  SEATS,
+  SPOTS,
+  STATIONS,
+  seatGroup,
+  type Seat,
+  type Spot,
+  type Station,
+} from '../shared/layout';
+import { BALL_R } from '../shared/ball';
+import { Games } from './games';
 import { ING_LABEL, RECIPES } from '../shared/kitchen';
 import { buildWorld } from './world';
 import { Avatar } from './avatar';
@@ -38,13 +54,14 @@ const canvas = $<HTMLCanvasElement>('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 // Neutral tone mapping keeps camera feeds and the cinema screen looking natural.
 renderer.toneMapping = THREE.NeutralToneMapping;
 
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 900);
 const world = buildWorld();
 const kitchen = new KitchenView(world.scene);
+const games = new Games(world.scene);
 
 // Bloom: only things brighter than white glow (lanterns, fire, neon, string lights).
 const composer = new EffectComposer(
@@ -351,6 +368,7 @@ function handle(msg: ServerMsg) {
       camFocus.set(me.x, 1.6, me.z);
       kitchen.setState(msg.kitchen, avatars);
       world.setBoard(msg.board);
+      games.setAll(msg.games);
       renderMenu();
       $('join').hidden = true;
       $('hud').hidden = false;
@@ -402,6 +420,18 @@ function handle(msg: ServerMsg) {
       break;
     case 'board':
       world.setBoard(msg.board);
+      break;
+    case 'ball':
+      games.syncBall(msg.ball);
+      break;
+    case 'score':
+      games.setScore(msg.score);
+      break;
+    case 'laps':
+      games.setLaps(msg.laps);
+      break;
+    case 'wheel':
+      games.spinWheel(msg.names, msg.winner, performance.now() / 1000);
       break;
   }
 }
@@ -490,6 +520,7 @@ chatInput.addEventListener('keydown', (e) => {
 interface Target {
   station?: Station;
   seat?: Seat;
+  spot?: Spot;
 }
 
 function nearest(): Target | null {
@@ -500,6 +531,13 @@ function nearest(): Target | null {
     const d = Math.hypot(station.x - me.x, station.z - me.z);
     if (d < 2.3 && d < bestD) {
       best = { station };
+      bestD = d;
+    }
+  }
+  for (const spot of SPOTS) {
+    const d = Math.hypot(spot.x - me.x, spot.z - me.z);
+    if (d < 2.6 && d < bestD) {
+      best = { spot };
       bestD = d;
     }
   }
@@ -517,6 +555,11 @@ function nearest(): Target | null {
 
 function promptFor(t: Target): string {
   if (t.seat) return 'E — sit down';
+  if (t.spot) {
+    if (t.spot.id === 'wheel') return 'E — spin the wheel';
+    if (t.spot.id === 'score') return 'E — reset the score to 0 – 0';
+    return race ? '' : 'E — start a timed lap';
+  }
   const st = t.station!;
   const held = kitchen.state?.held[myId] ?? null;
   const holding = !!held;
@@ -546,6 +589,8 @@ function interact() {
   }
   const t = nearest();
   if (t?.seat) send({ t: 'sit', seat: t.seat.id });
+  else if (t?.spot?.id === 'race') startRace();
+  else if (t?.spot) send({ t: 'spot', id: t.spot.id });
   else if (t?.station) send({ t: 'use', station: t.station.id });
 }
 
@@ -621,8 +666,45 @@ canvas.addEventListener(
 
 // ---------------------------------------------------------------- movement
 
-const LIMIT = ROOM_HALF - 0.7;
+const EDGE = 0.7;
 const BODY = 0.38;
+const WALK = 5.5;
+const RUN = 8.5;
+
+// Lap race: gates must be passed in order, ending back at the start.
+const RACE_ORDER = [...RACE.keys()].slice(1).concat(0);
+let race: { start: number; step: number } | null = null;
+const timerEl = $('timer');
+
+function startRace() {
+  if (race) return;
+  race = { start: performance.now(), step: 0 };
+  games.setNextGate(RACE_ORDER[0]);
+  toast('Go! Run through the glowing gates. Hold Shift to run.');
+}
+
+function endRace(finished: boolean) {
+  if (!race) return;
+  if (finished) send({ t: 'lap', ms: Math.round(performance.now() - race.start) });
+  race = null;
+  games.setNextGate(null);
+  timerEl.hidden = true;
+}
+
+function tickRace() {
+  if (!race || !me) return;
+  const elapsed = performance.now() - race.start;
+  if (me.seat || elapsed > 180_000) return endRace(false);
+  timerEl.hidden = false;
+  timerEl.textContent = `Lap ${(elapsed / 1000).toFixed(1)}s`;
+  const gate = RACE[RACE_ORDER[race.step]];
+  if (Math.hypot(gate.x - me.x, gate.z - me.z) > RACE_R) return;
+  race.step++;
+  if (race.step === RACE_ORDER.length) endRace(true);
+  else games.setNextGate(RACE_ORDER[race.step]);
+}
+
+let lastKick = 0;
 const inside = (c: (typeof COLLIDERS)[number], x: number, z: number) =>
   Math.abs(x - c.x) < c.hw + BODY && Math.abs(z - c.z) < c.hd + BODY;
 /** Would moving to (x, z) walk into something? Things you already overlap (the chair you just stood up from) don't count. */
@@ -661,17 +743,48 @@ function moveMe(dt: number) {
   const len = Math.hypot(dx, dz);
   dx /= len;
   dz /= len;
-  const step = 5.5 * dt;
-  const nx = Math.max(-LIMIT, Math.min(LIMIT, me.x + dx * step));
-  const nz = Math.max(-LIMIT, Math.min(LIMIT, me.z + dz * step));
+  const running = keys.has('ShiftLeft') || keys.has('ShiftRight');
+  const step = (running ? RUN : WALK) * dt;
+  const nx = Math.max(BOUNDS.x1 + EDGE, Math.min(BOUNDS.x2 - EDGE, me.x + dx * step));
+  const nz = Math.max(BOUNDS.z1 + EDGE, Math.min(BOUNDS.z2 - EDGE, me.z + dz * step));
   if (!blocked(nx, me.z, me.x, me.z)) me.x = nx;
   if (!blocked(me.x, nz, me.x, me.z)) me.z = nz;
   me.ry = turnToward(me.ry, Math.atan2(dx, dz), Math.min(1, dt * 14));
+
+  // Football: walking into the ball kicks it, mostly away from you and a little the way you're heading.
+  const ball = games.ball;
+  const bx = ball.x - me.x;
+  const bz = ball.z - me.z;
+  const gap = Math.hypot(bx, bz);
+  const now = performance.now();
+  if (gap < BODY + BALL_R + 0.15 && gap > 0.001 && now - lastKick > 180) {
+    lastKick = now;
+    let kx = (bx / gap) * 0.65 + dx * 0.35;
+    let kz = (bz / gap) * 0.65 + dz * 0.35;
+    const kl = Math.hypot(kx, kz) || 1;
+    const power = running ? 14 : 9;
+    kx = (kx / kl) * power;
+    kz = (kz / kl) * power;
+    games.kick(kx, kz);
+    send({ t: 'kick', vx: +kx.toFixed(2), vz: +kz.toFixed(2) });
+  }
+}
+
+// Local development only: lets automated tests place the player. Removed from production builds.
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__debug = {
+    tp(x: number, z: number) {
+      if (me) me.place(x, z, me.ry);
+    },
+    pos: () => (me ? [me.x, me.z] : null),
+    ball: () => ({ ...games.ball }),
+  };
 }
 
 // ---------------------------------------------------------------- main loop
 
-const sent = { x: NaN, z: NaN, ry: NaN };
+// Infinity (not NaN) so the very first comparison counts as "changed" and the position is sent.
+const sent = { x: Infinity, z: Infinity, ry: Infinity };
 let sendClock = 0;
 let nearClock = 0;
 let pingClock = 0;
@@ -684,6 +797,7 @@ function frame(nowMs: number) {
   const time = nowMs / 1000;
 
   moveMe(dt);
+  tickRace();
   for (const a of avatars.values()) a.update(dt, camera);
 
   if (me) {
@@ -738,8 +852,10 @@ function frame(nowMs: number) {
   const dirZ = Math.cos(camYaw) * cp;
   let fit = camDist;
   for (let i = 0; i < 14; i++) {
-    const limit = ROOM_HALF - 0.5 + Math.max(0, camFocus.y + dirY * fit - 2) * 4;
-    if (Math.abs(camFocus.x + dirX * fit) <= limit && Math.abs(camFocus.z + dirZ * fit) <= limit) break;
+    const slack = Math.max(0, camFocus.y + dirY * fit - 2) * 4 - 0.5;
+    const cx = camFocus.x + dirX * fit;
+    const cz = camFocus.z + dirZ * fit;
+    if (cx >= BOUNDS.x1 - slack && cx <= BOUNDS.x2 + slack && cz >= BOUNDS.z1 - slack && cz <= BOUNDS.z2 + slack) break;
     fit *= 0.88;
   }
   shownDist += (fit - shownDist) * Math.min(1, dt * 10);
@@ -747,6 +863,7 @@ function frame(nowMs: number) {
   camera.lookAt(camFocus);
 
   kitchen.update(camera);
+  games.update(time, dt);
   world.update(time, dt);
   composer.render();
 }

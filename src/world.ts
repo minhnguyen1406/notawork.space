@@ -1,7 +1,9 @@
 import * as THREE from 'three';
-import { ROOM_HALF, type Board } from '../shared/protocol';
+import type { Board } from '../shared/protocol';
 import {
   BILLBOARD,
+  BOUNDS,
+  CENTRE,
   DINING,
   LOUNGE,
   MAST_H,
@@ -34,7 +36,7 @@ export const mat = (color: string) => {
 };
 
 /** An unlit material brighter than white, so the bloom pass makes it glow. */
-const glow = (color: string, strength = 2.5) =>
+export const glow = (color: string, strength = 2.5) =>
   new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(strength) });
 
 export function box(w: number, h: number, d: number, color: string, x = 0, y = 0, z = 0) {
@@ -200,7 +202,7 @@ function skyline() {
   const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
   for (let i = 0; i < 90; i++) {
     const angle = (i / 90) * Math.PI * 2 + rnd() * 0.05;
-    const dist = 58 + rnd() * 95;
+    const dist = 85 + rnd() * 110;
     const w = 9 + rnd() * 14;
     const d = 9 + rnd() * 14;
     const top = -14 + rnd() * rnd() * 62; // most are below the roof, a few tower over it
@@ -221,23 +223,29 @@ function skyline() {
 
 export function buildWorld(): World {
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog('#4a2f4e', 55, 260);
-  scene.add(sky(), stars(), skyline());
+  scene.fog = new THREE.Fog('#4a2f4e', 75, 330);
+  const city = skyline();
+  city.position.set(CENTRE.x, 0, CENTRE.z);
+  scene.add(sky(), stars(), city);
 
   // --- Light: cool sky above, warm bounce below, and the last low sun from the west.
   scene.add(new THREE.HemisphereLight('#8a8fe0', '#ffb07a', 0.95));
   const sun = new THREE.DirectionalLight('#ff9a66', 1.25);
-  sun.position.set(-34, 20, 12);
+  sun.position.set(CENTRE.x - 44, 26, CENTRE.z + 10);
+  sun.target.position.set(CENTRE.x, 0, CENTRE.z);
+  scene.add(sun.target);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.bias = -0.0005;
   const sc = sun.shadow.camera;
-  sc.left = sc.bottom = -30;
-  sc.right = sc.top = 30;
-  sc.far = 110;
+  sc.left = sc.bottom = -52;
+  sc.right = sc.top = 52;
+  sc.far = 150;
   scene.add(sun);
 
-  const S = ROOM_HALF * 2;
+  const B = BOUNDS;
+  const W = B.x2 - B.x1;
+  const D = B.z2 - B.z1;
   const flatRug = (geo: THREE.BufferGeometry, color: string, x: number, z: number, y = 0.012) => {
     const m = new THREE.Mesh(geo, mat(color));
     m.rotation.x = -Math.PI / 2;
@@ -248,33 +256,39 @@ export function buildWorld(): World {
   };
 
   // --- The roof: decking, the building underneath, and a parapet with lanterns.
-  const deck = new THREE.Mesh(new THREE.PlaneGeometry(S + 1, S + 1), mat('#8f6a4b'));
+  const deck = new THREE.Mesh(new THREE.PlaneGeometry(W + 1, D + 1), mat('#8f6a4b'));
   deck.rotation.x = -Math.PI / 2;
+  deck.position.set(CENTRE.x, 0, CENTRE.z);
   deck.receiveShadow = true;
   scene.add(deck);
-  for (let i = -ROOM_HALF + 1; i < ROOM_HALF; i += 1) flatRug(new THREE.PlaneGeometry(S + 1, 0.05), '#73553b', 0, i, 0.006);
-  const tower = new THREE.Mesh(new THREE.BoxGeometry(S + 1.6, 120, S + 1.6), mat('#3b2f3f'));
-  tower.position.y = -60.05;
+  for (let z = B.z1 + 1; z < B.z2; z += 1) flatRug(new THREE.PlaneGeometry(W + 1, 0.05), '#73553b', CENTRE.x, z, 0.006);
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(W + 1.6, 120, D + 1.6), mat('#3b2f3f'));
+  tower.position.set(CENTRE.x, -60.05, CENTRE.z);
   scene.add(tower);
 
-  const EDGE = ROOM_HALF + 0.5;
   for (const [x, z, w, d] of [
-    [0, -EDGE, S + 1.6, 0.6],
-    [0, EDGE, S + 1.6, 0.6],
-    [-EDGE, 0, 0.6, S + 1.6],
-    [EDGE, 0, 0.6, S + 1.6],
+    [CENTRE.x, B.z1 - 0.5, W + 1.6, 0.6],
+    [CENTRE.x, B.z2 + 0.5, W + 1.6, 0.6],
+    [B.x1 - 0.5, CENTRE.z, 0.6, D + 1.6],
+    [B.x2 + 0.5, CENTRE.z, 0.6, D + 1.6],
   ] as const) {
     scene.add(box(w, 1.0, d, '#5a4658', x, 0.5, z));
     scene.add(box(w + 0.2, 0.12, d + 0.2, '#7a6278', x, 1.06, z));
   }
   const lanternGeo = new THREE.BoxGeometry(0.34, 0.44, 0.34);
   const lanternMat = glow('#ffb45e', 2.6);
-  for (let i = -16; i <= 16; i += 8) {
-    for (const [x, z] of [[i, -EDGE], [i, EDGE], [-EDGE, i], [EDGE, i]] as const) {
-      const l = new THREE.Mesh(lanternGeo, lanternMat);
-      l.position.set(x, 1.38, z);
-      scene.add(l);
-    }
+  const lantern = (x: number, z: number) => {
+    const l = new THREE.Mesh(lanternGeo, lanternMat);
+    l.position.set(x, 1.38, z);
+    scene.add(l);
+  };
+  for (let x = B.x1 + 4; x <= B.x2 - 4; x += 8) {
+    lantern(x, B.z1 - 0.5);
+    lantern(x, B.z2 + 0.5);
+  }
+  for (let z = B.z1 + 4; z <= B.z2 - 4; z += 8) {
+    lantern(B.x1 - 0.5, z);
+    lantern(B.x2 + 0.5, z);
   }
 
   // --- Masts, cables and string lights; the billboard hangs from the cables.

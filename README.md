@@ -9,6 +9,9 @@ together on the big screen, and cook in the kitchen with nobody timing you.
 - **Cinema:** share your screen (with sound) to the big screen. "Watch full screen" for movies.
 - **Sit down:** lounge chairs and the dining table switch to a grid of faces for everyone seated there.
 - **Kitchen:** take ingredients, chop, cook, plate and serve. Food never burns.
+- **Football:** a pitch with a ball you kick by walking into it, two goals and a scoreboard.
+- **Lap race:** a timed loop through four gates, with a fastest-laps board.
+- **The wheel:** spin it and it picks one person in the room at random.
 
 ## How it fits together
 
@@ -54,4 +57,5 @@ rebuilds and publishes the page.
 
 ## Controls
 
-WASD or arrows to move, drag to look, scroll to zoom, Enter to chat, E to use or sit, F to chop.
+WASD or arrows to move, Shift to run, drag to look, scroll to zoom, Enter to chat, E to use or sit,
+F to chop, hold V to talk, M to toggle the mic.

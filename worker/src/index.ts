@@ -4,14 +4,15 @@ import {
   MAX_CHAT,
   MAX_NAME,
   MAX_PLAYERS,
-  ROOM_HALF,
   TICK_HZ,
   type Board,
   type ClientMsg,
+  type GamesState,
   type PlayerInfo,
   type ServerMsg,
 } from '../../shared/protocol';
-import { SEATS, SPAWN, STATIONS } from '../../shared/layout';
+import { BOUNDS, SEATS, SPAWN, SPOTS, STATIONS } from '../../shared/layout';
+import { ballMoving, centreBall, MAX_KICK, stepBall } from '../../shared/ball';
 import { actStation, newKitchen, useStation, type KitchenState } from '../../shared/kitchen';
 
 export interface Env {
@@ -27,6 +28,10 @@ export interface Env {
 const LIVEKIT_ROOM = 'main';
 const REACH = 3.5; // how close you must be to a station to use it
 const STALE_MS = 60_000;
+const WHEEL_SPIN_MS = 4500;
+const WHEEL_MAX_NAMES = 12;
+const LAPS_KEPT = 5;
+const MIN_LAP_MS = 6000; // nobody can run the loop faster than this
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -45,8 +50,9 @@ interface Player extends PlayerInfo {
   lastChat: number;
 }
 
-const clamp = (v: unknown, limit: number) =>
-  typeof v === 'number' && Number.isFinite(v) ? Math.max(-limit, Math.min(limit, v)) : 0;
+const clamp = (v: unknown, limit: number) => range(v, -limit, limit);
+const range = (v: unknown, lo: number, hi: number) =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : Math.max(lo, Math.min(hi, 0));
 const clean = (v: unknown, max: number) =>
   typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, max) : '';
 
@@ -57,6 +63,9 @@ export class Room extends DurableObject<Env> {
   private timer: ReturnType<typeof setInterval> | null = null;
   private moved = false;
   private ticks = 0;
+  private games: GamesState = { ball: centreBall(), score: [0, 0], laps: [] };
+  private lastKicker = '';
+  private wheelBusyUntil = 0;
   private board: Board = { news: [], stocks: [], at: 0 };
   private boardBusy = false;
 
@@ -131,8 +140,26 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  /** Move the ball in two half-steps per tick and handle goals. */
+  private tickBall() {
+    const ball = this.games.ball;
+    if (!ballMoving(ball)) return;
+    const dt = 1 / TICK_HZ / 2;
+    const goal = stepBall(ball, dt) ?? stepBall(ball, dt);
+    if (goal) {
+      // The west goal is Red's, so a ball in it is a goal for Blue.
+      this.games.score[goal === 'west' ? 1 : 0]++;
+      this.games.ball = centreBall();
+      const [red, blue] = this.games.score;
+      this.broadcast({ t: 'score', score: this.games.score });
+      this.broadcast({ t: 'notice', text: `${this.lastKicker || 'Someone'} scored! Red ${red} – ${blue} Blue` });
+    }
+    this.broadcast({ t: 'ball', ball: this.games.ball });
+  }
+
   private tick() {
     this.ticks++;
+    this.tickBall();
     if (this.moved) {
       this.moved = false;
       this.broadcast({ t: 'state', players: [...this.players.values()].map((p) => [p.id, p.x, p.z, p.ry]) });
@@ -165,8 +192,8 @@ export class Room extends DurableObject<Env> {
     switch (msg.t) {
       case 'move':
         if (me.seat) return;
-        me.x = clamp(msg.x, ROOM_HALF);
-        me.z = clamp(msg.z, ROOM_HALF);
+        me.x = range(msg.x, BOUNDS.x1, BOUNDS.x2);
+        me.z = range(msg.z, BOUNDS.z1, BOUNDS.z2);
         me.ry = clamp(msg.ry, Math.PI * 2);
         this.moved = true;
         break;
@@ -209,6 +236,71 @@ export class Room extends DurableObject<Env> {
         if (!result.changed) return;
         this.sendKitchen();
         if (result.served) this.broadcast({ t: 'notice', text: `${me.name} served a ${result.served}` });
+        break;
+      }
+
+      case 'kick': {
+        const ball = this.games.ball;
+        if (me.seat || Math.hypot(ball.x - me.x, ball.z - me.z) > 3.5) return;
+        let vx = clamp(msg.vx, MAX_KICK);
+        let vz = clamp(msg.vz, MAX_KICK);
+        const speed = Math.hypot(vx, vz);
+        if (speed > MAX_KICK) {
+          vx *= MAX_KICK / speed;
+          vz *= MAX_KICK / speed;
+        }
+        ball.vx = vx;
+        ball.vz = vz;
+        this.lastKicker = me.name;
+        this.broadcast({ t: 'ball', ball }, ws);
+        break;
+      }
+
+      case 'spot': {
+        const spot = SPOTS.find((s) => s.id === msg.id);
+        if (!spot || me.seat || Math.hypot(spot.x - me.x, spot.z - me.z) > REACH) return;
+        if (spot.id === 'score') {
+          this.games.score = [0, 0];
+          this.games.ball = centreBall();
+          this.broadcast({ t: 'score', score: this.games.score });
+          this.broadcast({ t: 'ball', ball: this.games.ball });
+          this.broadcast({ t: 'notice', text: `${me.name} reset the score` });
+        } else if (spot.id === 'wheel') {
+          const now = Date.now();
+          if (now < this.wheelBusyUntil) return;
+          this.wheelBusyUntil = now + WHEEL_SPIN_MS + 1500;
+          // Everyone present goes on the wheel (a random dozen if the room is very full).
+          const names = [...this.players.values()].map((p) => p.name);
+          for (let i = names.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [names[i], names[j]] = [names[j], names[i]];
+          }
+          names.length = Math.min(names.length, WHEEL_MAX_NAMES);
+          const winner = Math.floor(Math.random() * names.length);
+          this.broadcast({ t: 'wheel', names, winner });
+          setTimeout(
+            () => this.broadcast({ t: 'notice', text: `The wheel picked ${names[winner]}!` }),
+            WHEEL_SPIN_MS,
+          );
+        }
+        break;
+      }
+
+      case 'lap': {
+        const ms = typeof msg.ms === 'number' && Number.isFinite(msg.ms) ? Math.round(msg.ms) : 0;
+        if (ms < MIN_LAP_MS || ms > 10 * 60_000) return;
+        const laps = this.games.laps;
+        const record = laps.length === 0 || ms < laps[0].ms;
+        const mine = laps.find((l) => l.name === me.name);
+        if (!mine) laps.push({ name: me.name, ms });
+        else if (ms < mine.ms) mine.ms = ms;
+        laps.sort((a, b) => a.ms - b.ms);
+        laps.length = Math.min(laps.length, LAPS_KEPT);
+        this.broadcast({ t: 'laps', laps });
+        this.broadcast({
+          t: 'notice',
+          text: `${me.name} ran a lap in ${(ms / 1000).toFixed(2)}s${record ? ' — a new record!' : ''}`,
+        });
         break;
       }
 
@@ -257,6 +349,7 @@ export class Room extends DurableObject<Env> {
       players: [...this.players.values()].map(publicInfo),
       kitchen: this.kitchen,
       board: this.board,
+      games: this.games,
       media,
     });
     this.refreshBoard();

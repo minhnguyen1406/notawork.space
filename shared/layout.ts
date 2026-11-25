@@ -4,6 +4,48 @@ import type { IngType } from './kitchen';
 
 export const SPAWN = { x: 0, z: 10 };
 
+/** The walkable roof. The original corner (cinema, lounge, kitchen) sits in the north-east. */
+export const BOUNDS = { x1: -44, x2: 20, z1: -20, z2: 44 };
+export const CENTRE = { x: (BOUNDS.x1 + BOUNDS.x2) / 2, z: (BOUNDS.z1 + BOUNDS.z2) / 2 };
+
+/** Football pitch (south). Goals are at the west and east ends. */
+export const PITCH = { x1: -30, x2: 6, z1: 24, z2: 41, cx: -12, cz: 32.5 };
+export const GOAL_HALF = 3;
+
+/** Lap race (west): start at gate 0, pass the others in order, finish back at gate 0. */
+export const RACE: { x: number; z: number }[] = [
+  { x: -23, z: 14 },
+  { x: -23, z: -15 },
+  { x: -41, z: -15 },
+  { x: -41, z: 15 },
+];
+export const RACE_R = 3;
+export const LAP_BOARD = { x: -27, z: 18 };
+
+/** The wheel that picks someone at random. It faces east. */
+export const WHEEL = { x: -32, z: 0 };
+export const SCOREBOARD = { x: -12, z: 22.2 };
+
+/** Places where pressing E does something that isn't a kitchen station or a seat. */
+export interface Spot {
+  id: 'wheel' | 'score' | 'race';
+  x: number;
+  z: number;
+}
+export const SPOTS: Spot[] = [
+  { id: 'wheel', x: WHEEL.x + 2, z: WHEEL.z },
+  { id: 'score', x: SCOREBOARD.x, z: SCOREBOARD.z },
+  { id: 'race', x: RACE[0].x, z: RACE[0].z },
+];
+
+/** Floodlight poles at the corners of the pitch. */
+export const FLOODLIGHTS: { x: number; z: number }[] = [
+  { x: PITCH.x1 - 1.2, z: PITCH.z1 - 1.2 },
+  { x: PITCH.x2 + 1.2, z: PITCH.z1 - 1.2 },
+  { x: PITCH.x1 - 1.2, z: PITCH.z2 + 1.2 },
+  { x: PITCH.x2 + 1.2, z: PITCH.z2 + 1.2 },
+];
+
 /** The cinema screen on the north wall. */
 export const SCREEN = { x: 0, y: 4.9, z: -19.7, w: 14, h: 7.875 };
 
@@ -101,6 +143,17 @@ export const PLANTS: { x: number; z: number; scale: number }[] = [
   { x: 3.4, z: 18.2, scale: 1 },
   { x: -18.4, z: -7, scale: 1.2 },
   { x: -18.4, z: -1, scale: 1.2 },
+  { x: -42.4, z: -18.4, scale: 1.4 },
+  { x: -42.4, z: 42.4, scale: 1.4 },
+  { x: 18.4, z: 42.4, scale: 1.4 },
+  { x: -32, z: -17.5, scale: 1.1 },
+  { x: -32, z: 17.5, scale: 1.1 },
+  { x: 12, z: 23, scale: 1.2 },
+  { x: 17, z: 30, scale: 1 },
+  { x: 12, z: 37, scale: 1.2 },
+  { x: -37, z: 26, scale: 1.2 },
+  { x: -40, z: 34, scale: 1 },
+  { x: -36, z: 41, scale: 1.2 },
 ];
 
 /** Tall corner masts that hold up the billboard cables and string lights. */
@@ -134,4 +187,9 @@ export const COLLIDERS: Collider[] = [
   ...PLANTS.map((p) => square(p.x, p.z, 0.42 * p.scale)),
   ...MASTS.map((m) => square(m.x, m.z, 0.3)),
   ...PERGOLA_POSTS.map((p) => square(p.x, p.z, 0.2)),
+  ...FLOODLIGHTS.map((f) => square(f.x, f.z, 0.25)),
+  { x: WHEEL.x, z: WHEEL.z, hw: 0.5, hd: 2.7 },
+  square(SCOREBOARD.x - 3, SCOREBOARD.z - 0.9, 0.2),
+  square(SCOREBOARD.x + 3, SCOREBOARD.z - 0.9, 0.2),
+  { x: LAP_BOARD.x, z: LAP_BOARD.z, hw: 1.7, hd: 0.25 },
 ];
