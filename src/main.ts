@@ -1,3 +1,5 @@
+import { FEATURES } from './features/registry';
+import type { ClientEvent } from './features/api';
 import { CLIENT_GAMES } from './minigames/registry';
 import type { ClientGame } from './minigames/api';
 import { GAME_SPOTS, type GameId } from '../shared/minigames';
@@ -518,6 +520,62 @@ for (const [id, game] of miniGames) {
     put: (x, z) => me?.place(x, z, me.ry),
   });
 }
+// ---------------------------------------------------------------- add-on features (src/features)
+const roomListeners: ((e: ClientEvent) => void)[] = [];
+/** Tell the add-on features about something that happened. One that throws must not break the room. */
+function emit(e: ClientEvent) {
+  for (const fn of roomListeners) {
+    try {
+      fn(e);
+    } catch (err) {
+      console.error('feature listener failed', err);
+    }
+  }
+}
+const featureList = Object.values(FEATURES);
+for (const f of featureList) {
+  f.init({
+    scene: world.scene,
+    camera,
+    canvas,
+    avatars,
+    myId: () => myId,
+    me: () => me,
+    ball: () => games.ball,
+    media: () => media,
+    keys,
+    // Go through the real key handler, so a pressed button does exactly what the key does.
+    press: (code) => {
+      dispatchEvent(new KeyboardEvent('keydown', { code }));
+      dispatchEvent(new KeyboardEvent('keyup', { code }));
+    },
+    talk: (held) => {
+      if (held === talkHeld) return;
+      talkHeld = held;
+      applyMic();
+    },
+    look: (dYaw, dPitch, dZoom) => {
+      wantYaw += dYaw;
+      wantPitch = Math.max(0.12, Math.min(1.35, wantPitch + dPitch));
+      wantDist = Math.max(4, Math.min(26, wantDist + dZoom));
+    },
+    yaw: () => camYaw,
+    prompt: () => (promptEl.hidden ? '' : (promptEl.textContent ?? '')),
+    toast: (text) => toast(text),
+    hud: $('hud'),
+    topbar: $('topbar'),
+    on: (fn) => roomListeners.push(fn),
+    setUiHidden: (hidden) => document.body.classList.toggle('ui-hidden', hidden),
+    capture: () =>
+      new Promise((resolve, reject) => {
+        // Draw a frame and read it back at once: the picture is thrown away after each frame otherwise.
+        composer.render();
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('could not read the picture'))), 'image/png');
+      }),
+    store,
+  });
+}
+
 /** The game whose signpost I'm standing at, if any. */
 function nearGame(): [GameId, ClientGame] | null {
   if (!me || me.seat) return null;
@@ -566,6 +624,7 @@ function handle(msg: ServerMsg) {
       $('hud').hidden = false;
       everJoined = true;
       retries = 0;
+      emit({ kind: 'welcome' });
       if (backTo) {
         // Reconnected: put me back where I was standing.
         me.place(backTo.x, backTo.z, backTo.ry);
@@ -588,11 +647,13 @@ function handle(msg: ServerMsg) {
       break;
     case 'join':
       addAvatar(msg.player);
+      emit({ kind: 'join', player: msg.player });
       logLine(`${msg.player.name} came in`);
       break;
     case 'leave': {
       const a = avatars.get(msg.id);
       if (a) logLine(`${a.info.name} left`);
+      emit({ kind: 'leave', id: msg.id, name: a?.info.name ?? '' });
       removeAvatar(msg.id);
       cams.delete(msg.id);
       renderGrid();
@@ -607,6 +668,7 @@ function handle(msg: ServerMsg) {
       a.seat = msg.seat;
       const seat = msg.seat ? seatById.get(msg.seat) : null;
       if (seat) a.place(seat.x, seat.z, seat.ry);
+      emit({ kind: 'sit', id: msg.id, seat: msg.seat });
       renderGrid();
       break;
     }
@@ -614,6 +676,7 @@ function handle(msg: ServerMsg) {
       const a = avatars.get(msg.id);
       logLine(msg.text, { name: msg.name, color: a?.info.color ?? '#fff' });
       a?.say(msg.text);
+      emit({ kind: 'chat', id: msg.id, name: msg.name, text: msg.text });
       break;
     }
     case 'kitchen':
@@ -622,6 +685,7 @@ function handle(msg: ServerMsg) {
       break;
     case 'notice':
       toast(msg.text);
+      emit({ kind: 'notice', text: msg.text });
       logLine(msg.text);
       if (/\b(won|wins|new record)\b/i.test(msg.text)) {
         confetti();
@@ -650,6 +714,7 @@ function handle(msg: ServerMsg) {
       break;
     case 'emote':
       avatars.get(msg.id)?.emote(msg.k);
+      emit({ kind: 'emote', id: msg.id, k: msg.k });
       if (msg.k !== 'zzz' && msg.id !== myId) play('pop');
       break;
     case 'work': {
@@ -670,14 +735,20 @@ function handle(msg: ServerMsg) {
       if (msg.table === 'chess') thinkForClaude(msg.view as ChessView);
       if (myGridGroup() === msg.table && isTable(msg.table)) tableUI.show(msg.table, msg.view);
       break;
-    case 'ball':
+    case 'ball': {
+      // Someone else struck the ball if it is suddenly much faster than this browser expected.
+      const was = Math.hypot(games.ball.vx, games.ball.vz);
+      const now = Math.hypot(msg.ball.vx, msg.ball.vz);
+      if (now > was + 4) emit({ kind: 'kick', power: now, mine: false });
       games.syncBall(msg.ball);
       break;
+    }
     case 'score':
       if (msg.score[0] + msg.score[1] > lastScoreTotal) {
         confetti(['⚽', '🎉', '🥅', '✨']);
         play('horn');
       }
+      if (msg.score[0] + msg.score[1] > lastScoreTotal) emit({ kind: 'goal', score: msg.score });
       lastScoreTotal = msg.score[0] + msg.score[1];
       games.setScore(msg.score);
       break;
@@ -816,6 +887,7 @@ function connect() {
  * it and keep trying to get back in; you return as a new arrival standing where you were.
  */
 function lostRoom() {
+  emit({ kind: 'lost' });
   if (me) backTo = { x: me.x, z: me.z, ry: me.ry };
   me = null;
   myId = '';
@@ -957,6 +1029,7 @@ addEventListener('keydown', (e) => {
   if (!guideEl.hidden && e.code !== 'KeyH' && e.code !== 'Escape') return;
   // A party game may want this key (number keys to answer, Escape to close its panel).
   if (!e.repeat) for (const [, g] of miniGames) if (g.key?.(e.code)) return;
+  if (!e.repeat) for (const f of featureList) if (f.key?.(e.code)) return;
   switch (e.code) {
     case 'Enter':
       if (e.target instanceof HTMLButtonElement) return; // let Enter press the focused button
@@ -1278,6 +1351,7 @@ function moveMe(dt: number) {
       const kx = velX * 0.55 + nx * push * 0.55;
       const kz = velZ * 0.55 + nz * push * 0.55;
       games.kick(kx, kz);
+      emit({ kind: 'kick', power: Math.hypot(kx, kz), mine: true });
       send({ t: 'kick', vx: +kx.toFixed(2), vz: +kz.toFixed(2) });
     }
   }
@@ -1308,6 +1382,7 @@ function shoot() {
   kz = (kz / kl) * power;
   const lift = Math.min(MAX_LIFT, 5 + pace * 0.4);
   games.kick(kx, kz, lift);
+  emit({ kind: 'kick', power, mine: true });
   send({ t: 'kick', vx: +kx.toFixed(2), vz: +kz.toFixed(2), vy: +lift.toFixed(2) });
 }
 
@@ -1402,6 +1477,7 @@ function frame(nowMs: number) {
   for (const a of avatars.values()) a.update(dt, camera);
   duelUI.frame();
   for (const [, g] of miniGames) g.frame?.(dt, time);
+  for (const f of featureList) f.frame?.(dt, time);
 
   if (me) {
     camFocus.lerp(new THREE.Vector3(me.x, 1.6, me.z), 1 - Math.exp(-12 * dt));

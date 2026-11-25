@@ -24,7 +24,10 @@ export interface GameIO {
 /** Things that happen elsewhere in the room that a game may care about. */
 export type RoomEvent =
   | { kind: 'goal'; side: 'red' | 'blue'; by: string } // `side` scored; `by` is the last kicker's name
-  | { kind: 'serve'; id: string; name: string; dish: string }; // someone served a dish in the kitchen
+  | { kind: 'serve'; id: string; name: string; dish: string } // someone served a dish in the kitchen
+  | { kind: 'duel'; winner: string; loser: string } // a duel ended with a winner (names)
+  | { kind: 'lap'; name: string; ms: number } // someone finished a timed lap of the race course
+  | { kind: 'chess'; winner: string }; // checkmate at the chess table (winner's name)
 
 /** The server side of one game. The server is the only authority: never trust what a browser claims. */
 export interface ServerGame {

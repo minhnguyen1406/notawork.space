@@ -14,6 +14,8 @@ import { game as tienlen } from './tienlen';
 import { game as baucua } from './baucua';
 import { game as words } from './words';
 import { game as cookoff } from './cookoff';
+import { game as tube } from './tube';
+import { game as board } from './board';
 
 /** Every game's browser side, by id. */
-export const CLIENT_GAMES: Record<GameId, ClientGame> = { dare, draw, trivia, tag, hide, sumo, cup, obstacle, dice, tienlen, baucua, words, cookoff };
+export const CLIENT_GAMES: Record<GameId, ClientGame> = { dare, draw, trivia, tag, hide, sumo, cup, obstacle, dice, tienlen, baucua, words, cookoff, tube, board };

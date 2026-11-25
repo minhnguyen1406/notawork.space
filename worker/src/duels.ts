@@ -6,6 +6,8 @@ export interface DuelIO {
   /** Send to one person. */
   send(id: string, msg: ServerMsg): void;
   broadcast(msg: ServerMsg): void;
+  /** A duel ended with a winner. */
+  result?(winner: string, loser: string): void;
 }
 
 /** Challenges and duels in progress. The server decides everything; browsers only show it. */
@@ -81,6 +83,7 @@ export class Duels {
     const text = d.winner === '' ? `The duel between ${d.a.name} and ${d.b.name} ended in a draw` : `🏆 ${name(d.winner!)} won the duel against ${name(d.winner === d.a.id ? d.b.id : d.a.id)}`;
     this.publish(d, now);
     this.io.broadcast({ t: 'notice', text });
+    if (d.winner) this.io.result?.(name(d.winner), name(d.winner === d.a.id ? d.b.id : d.a.id));
   }
 
   private step(d: Duel, now: number) {

@@ -13,6 +13,8 @@ import { create as tienlen } from './tienlen';
 import { create as baucua } from './baucua';
 import { create as words } from './words';
 import { create as cookoff } from './cookoff';
+import { create as tube } from './tube';
+import { create as board } from './board';
 
 /** Every game's server side, by id. */
-export const SERVER_GAMES: Record<GameId, GameFactory> = { dare, draw, trivia, tag, hide, sumo, cup, obstacle, dice, tienlen, baucua, words, cookoff };
+export const SERVER_GAMES: Record<GameId, GameFactory> = { dare, draw, trivia, tag, hide, sumo, cup, obstacle, dice, tienlen, baucua, words, cookoff, tube, board };

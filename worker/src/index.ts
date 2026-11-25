@@ -94,6 +94,7 @@ export class Room extends DurableObject<Env> {
       for (const p of this.players.values()) if (p.id === id) this.send(p.ws, msg);
     },
     broadcast: (msg) => this.broadcast(msg),
+    result: (winner, loser) => this.miniEvent({ kind: 'duel', winner, loser }),
   });
 
   /** The party games (worker/src/minigames). Each gets its own channel to the room. */
@@ -173,6 +174,7 @@ export class Room extends DurableObject<Env> {
     notice: (text) => this.broadcast({ t: 'notice', text }),
     botSay: (text) => this.npcSay(text),
     botEmote: (k) => this.broadcast({ t: 'emote', id: NPC_ID, k }),
+    won: (game, name) => game === 'chess' && this.miniEvent({ kind: 'chess', winner: name }),
   });
   private wheelBusyUntil = 0;
   private board: Board = { news: [], stocks: [], at: 0 };
@@ -462,6 +464,7 @@ export class Room extends DurableObject<Env> {
         laps.sort((a, b) => a.ms - b.ms);
         laps.length = Math.min(laps.length, LAPS_KEPT);
         this.broadcast({ t: 'laps', laps });
+        this.miniEvent({ kind: 'lap', name: me.name, ms });
         this.broadcast({
           t: 'notice',
           text: `${me.name} ran a lap in ${(ms / 1000).toFixed(2)}s${record ? ' — a new record!' : ''}`,

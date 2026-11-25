@@ -38,6 +38,8 @@ export interface TableIO {
   /** Have the Claude character say something or react. */
   botSay(text: string): void;
   botEmote(k: string): void;
+  /** Someone won at a table (currently only chess reports this). */
+  won?(game: string, name: string): void;
 }
 
 const pick = <T>(list: T[]) => list[Math.floor(Math.random() * list.length)];
@@ -161,7 +163,10 @@ export class Tables {
         return; // not a legal move
       }
       this.chessLast = { from: a.from, to: a.to };
-      if (this.chess.isCheckmate()) this.io.notice(`${a.k === 'bot' ? 'Claude' : p.name} won at chess by checkmate`);
+      if (this.chess.isCheckmate()) {
+        this.io.notice(`${a.k === 'bot' ? 'Claude' : p.name} won at chess by checkmate`);
+        this.io.won?.('chess', a.k === 'bot' ? 'Claude' : p.name);
+      }
       if (bot) this.chessTalk(san, a.k === 'bot', p.name);
     } else {
       return;

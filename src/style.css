@@ -1268,3 +1268,11 @@ kbd {
   font-size: 13px;
   text-align: right;
 }
+
+/* Photo mode: everything but the 3D picture is hidden */
+body.ui-hidden #hud,
+body.ui-hidden #grid,
+body.ui-hidden #theater,
+body.ui-hidden #guide {
+  display: none !important;
+}
