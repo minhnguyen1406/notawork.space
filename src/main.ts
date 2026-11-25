@@ -1137,6 +1137,7 @@ if (import.meta.env.DEV) {
     ball: () => ({ ...games.ball }),
     id: () => myId,
     dropRoom: () => ws?.close(),
+    talking: () => [...avatars].filter(([, a]) => a.speaking).map(([id]) => id),
     looks: () => Object.fromEntries([...avatars].map(([id, a]) => [id, a.info.look])),
     table: (id: string) => tableViews.get(id) ?? null,
     where: (id: string) => {

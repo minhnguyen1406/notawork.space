@@ -165,6 +165,13 @@ export class Avatar {
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.035;
     this.group.add(ring);
+    this.footRing = ring;
+
+    // Shown while this person is talking: a speaker over their name (and the ring pulses green).
+    this.talkIcon = emojiSprite('🔊', 0.62);
+    this.talkIcon.position.set(0, 3.42, 0);
+    this.talkIcon.visible = false;
+    this.group.add(this.talkIcon);
 
     this.hold.position.set(0, 1.0, 0.62);
     this.inner.add(this.hold);
@@ -195,6 +202,9 @@ export class Avatar {
     this.path.length = 0;
   }
 
+  private footRing!: THREE.Mesh;
+  private talkIcon!: THREE.Sprite;
+  speaking = false;
   private videoTime = -1;
   /** True if this person's camera bubble is drawn mirrored (only ever your own). */
   get mirrored() {
@@ -261,9 +271,13 @@ export class Avatar {
     this.video = { holder, tex, el, ring, face, aspect: 0 };
   }
 
+  /** Mark this person as talking (or not): a speaker icon, a pulsing green ring, and the camera rim. */
   setSpeaking(on: boolean) {
-    if (!this.video) return;
-    (this.video.ring.material as THREE.MeshBasicMaterial).color.set(on ? '#9be564' : this.info.color);
+    this.speaking = on;
+    this.talkIcon.visible = on;
+    (this.footRing.material as THREE.MeshBasicMaterial).color.set(on ? '#7dff6a' : this.info.color);
+    if (!on) this.footRing.scale.setScalar(1);
+    if (this.video) (this.video.ring.material as THREE.MeshBasicMaterial).color.set(on ? '#9be564' : this.info.color);
   }
 
   update(dt: number, camera: THREE.Camera) {
@@ -309,6 +323,13 @@ export class Avatar {
     this.inner.position.y += (targetY - this.inner.position.y) * Math.min(1, dt * 14);
 
     const now = performance.now();
+    if (this.speaking) {
+      const beat = 1 + Math.sin(now / 110) * 0.12;
+      this.footRing.scale.setScalar(beat + 0.12);
+      this.talkIcon.scale.setScalar(0.62 * beat);
+      // Sit above the camera bubble if there is one, otherwise just over the name.
+      this.talkIcon.position.y = this.video ? 5.0 : 3.42;
+    }
     // Dancing: spin, bounce, arms in the air.
     const dancing = now < this.danceUntil && !sitting && !this.walking;
 

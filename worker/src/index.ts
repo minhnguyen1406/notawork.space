@@ -25,6 +25,8 @@ export interface Env {
   LIVEKIT_URL?: string;
   LIVEKIT_API_KEY?: string;
   LIVEKIT_API_SECRET?: string;
+  /** Which voice room to use. Local development sets its own, so tests never land in the live call. */
+  LIVEKIT_ROOM?: string;
   /** Optional. With a Finnhub key, stock prices come from Finnhub instead of Yahoo's unofficial endpoint. */
   FINNHUB_API_KEY?: string;
 }
@@ -429,7 +431,7 @@ export class Room extends DurableObject<Env> {
     if (LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET) {
       this.joining.add(ws);
       try {
-        media = { url: LIVEKIT_URL, token: await livekitToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, me.id, me.name) };
+        media = { url: LIVEKIT_URL, token: await livekitToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, this.env.LIVEKIT_ROOM || LIVEKIT_ROOM, me.id, me.name) };
       } finally {
         this.joining.delete(ws);
       }
@@ -469,7 +471,7 @@ const b64url = (bytes: Uint8Array) => {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 };
 
-async function livekitToken(apiKey: string, apiSecret: string, identity: string, name: string): Promise<string> {
+async function livekitToken(apiKey: string, apiSecret: string, room: string, identity: string, name: string): Promise<string> {
   const text = new TextEncoder();
   const now = Math.floor(Date.now() / 1000);
   const part = (o: unknown) => b64url(text.encode(JSON.stringify(o)));
@@ -482,7 +484,7 @@ async function livekitToken(apiKey: string, apiSecret: string, identity: string,
       name,
       nbf: now - 10,
       exp: now + 6 * 3600,
-      video: { room: LIVEKIT_ROOM, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true },
+      video: { room, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true },
     });
   const k = await crypto.subtle.importKey('raw', text.encode(apiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, [
     'sign',

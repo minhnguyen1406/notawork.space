@@ -4,3 +4,5 @@ ROOM_PASSWORD=
 LIVEKIT_URL=
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=
+# Keep local development in its own voice room, away from the live one.
+LIVEKIT_ROOM=dev
