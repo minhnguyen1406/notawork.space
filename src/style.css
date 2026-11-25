@@ -1056,3 +1056,44 @@ kbd {
   border-radius: 14px;
   padding: 10px;
 }
+
+/* Character picker on the join screen */
+.looks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.look-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.look-row span {
+  width: 50px;
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+.look {
+  flex: 1;
+  min-width: 0;
+  max-width: 44px;
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background: rgba(255, 233, 201, 0.07);
+  backdrop-filter: none;
+  overflow: hidden;
+  line-height: 0;
+}
+.look img {
+  width: 100%;
+  height: 100%;
+  /* The drawings are small inside their frames, so zoom in on the figure. */
+  transform: scale(1.9);
+}
+.look.picked {
+  border-color: var(--accent-2);
+  background: rgba(243, 167, 18, 0.2);
+}

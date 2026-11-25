@@ -64,7 +64,7 @@ export function commandIn(text: string): string | null {
  * fixed commands; it does not understand free conversation.
  */
 export class Npc {
-  readonly info: PlayerInfo = { id: NPC_ID, name: 'Claude', color: '#f2efe6', x: HOME.x, z: HOME.z, ry: Math.PI, seat: null };
+  readonly info: PlayerInfo = { id: NPC_ID, name: 'Claude', color: '#f2efe6', look: 'robot', x: HOME.x, z: HOME.z, ry: Math.PI, seat: null };
   here = true;
   private route: Point[] = [];
   private arrive: (() => void) | null = null;

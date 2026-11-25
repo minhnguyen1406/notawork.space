@@ -9,10 +9,15 @@ export const TICK_HZ = 10;
 
 export const COLORS = ['#e4572e', '#f3a712', '#76b041', '#29a19c', '#3a86ff', '#8338ec', '#ff5d8f', '#f2efe6'];
 
+/** The characters people can choose to be. (Models from Kenney's Mini Characters pack.) */
+export const LOOKS = ['female-a', 'female-b', 'female-c', 'female-d', 'female-e', 'female-f', 'male-a', 'male-b', 'male-c', 'male-d', 'male-e', 'male-f', 'male-g'];
+
 export interface PlayerInfo {
   id: string;
   name: string;
   color: string;
+  /** Which character model they chose (one of LOOKS; the Claude character is 'robot'). */
+  look: string;
   x: number;
   z: number;
   ry: number;
@@ -41,7 +46,7 @@ export interface GamesState {
 }
 
 export type ClientMsg =
-  | { t: 'join'; name: string; color: string; password?: string }
+  | { t: 'join'; name: string; color: string; look?: string; password?: string }
   | { t: 'move'; x: number; z: number; ry: number }
   | { t: 'chat'; text: string }
   /** A reaction over your head, a dance, or a snooze (see shared/fun.ts). */

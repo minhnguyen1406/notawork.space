@@ -1,28 +1,14 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { NPC_ID } from '../shared/fun';
+import { LOOKS } from '../shared/protocol';
 
 // Animated people from Kenney's "Mini Characters" pack (CC0). See ASSETS.md.
-const PEOPLE = ['male-a', 'female-a', 'male-b', 'female-b', 'male-c', 'female-c', 'male-d', 'female-d', 'male-e', 'female-e', 'male-f', 'female-f', 'male-g'];
 /** How tall a character stands in the room, in metres (the models themselves are tiny). */
 const HEIGHT = 2.2;
 
-// A well-mixed hash (FNV-1a). A simpler one put most short names on the same character.
-const hash = (s: string) => {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-};
-
-/**
- * Which model someone gets: a random one each time they come in. It is worked out from the id the
- * server gave them, so everyone in the room sees the same character for the same person.
- */
-export const characterFor = (id: string, _name: string) => (id === NPC_ID ? 'robot' : PEOPLE[hash(id) % PEOPLE.length]);
+/** The model file for someone's chosen character, falling back to the first if the choice is unknown. */
+export const characterFor = (look: string) => (look === 'robot' || LOOKS.includes(look) ? look : LOOKS[0]);
 
 export interface Character {
   root: THREE.Object3D;

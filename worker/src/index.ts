@@ -12,6 +12,7 @@ import {
   type GamesState,
   type PlayerInfo,
   type ServerMsg,
+  LOOKS,
 } from '../../shared/protocol';
 import { BOUNDS, SEATS, SPAWN, SPOTS, STATIONS } from '../../shared/layout';
 import { ballMoving, centreBall, MAX_KICK, stepBall, MAX_LIFT } from '../../shared/ball';
@@ -411,6 +412,8 @@ export class Room extends DurableObject<Env> {
       id: crypto.randomUUID().slice(0, 8),
       name: clean(msg.name, MAX_NAME) || 'Guest',
       color: COLORS.includes(msg.color) ? msg.color : COLORS[0],
+      // No choice sent (an older page): pick one at random.
+      look: LOOKS.includes(msg.look ?? '') ? msg.look! : LOOKS[Math.floor(Math.random() * LOOKS.length)],
       x: SPAWN.x + (Math.random() - 0.5) * 6,
       z: SPAWN.z + Math.random() * 3,
       ry: Math.PI,
@@ -456,7 +459,7 @@ export class Room extends DurableObject<Env> {
   }
 }
 
-const publicInfo = ({ id, name, color, x, z, ry, seat }: PlayerInfo): PlayerInfo => ({ id, name, color, x, z, ry, seat });
+const publicInfo = ({ id, name, color, look, x, z, ry, seat }: PlayerInfo): PlayerInfo => ({ id, name, color, look, x, z, ry, seat });
 
 // --- LiveKit access token: a short-lived HS256 JWT, signed here so the secret never reaches browsers.
 

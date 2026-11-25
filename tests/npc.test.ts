@@ -15,7 +15,7 @@ test('only messages addressed to Claude are commands', () => {
 });
 
 function room() {
-  const minh: PlayerInfo = { id: 'p1', name: 'Minh', color: '#fff', x: 0, z: 12, ry: 0, seat: null };
+  const minh: PlayerInfo = { id: 'p1', name: 'Minh', color: '#fff', look: 'male-a', x: 0, z: 12, ry: 0, seat: null };
   const said: string[] = [];
   const emotes: string[] = [];
   const taken = new Set<string>();

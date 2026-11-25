@@ -151,7 +151,7 @@ export class Avatar {
     // character model as soon as it has loaded (or stay, if it can't be fetched).
     this.rough.add(...this.inner.children);
     this.inner.add(this.rough);
-    void makeCharacter(characterFor(info.id, info.name))
+    void makeCharacter(characterFor(info.look))
       .then((c) => {
         if (this.gone) return;
         this.character = c;

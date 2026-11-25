@@ -10,7 +10,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import './style.css';
-import { COLORS, TICK_HZ, type ClientMsg, type PlayerInfo, type ServerMsg } from '../shared/protocol';
+import { COLORS, TICK_HZ, type ClientMsg, type PlayerInfo, type ServerMsg, LOOKS } from '../shared/protocol';
 import {
   BOUNDS,
   GRID_GROUPS,
@@ -581,6 +581,46 @@ function paintSwatches() {
   [...swatches.children].forEach((el, i) => el.classList.toggle('picked', COLORS[i] === color));
 }
 paintSwatches();
+
+// Character picker: everyone chooses who they are. A first-time visitor starts on a random one.
+let look = store.get('look') ?? '';
+if (!LOOKS.includes(look)) look = LOOKS[Math.floor(Math.random() * LOOKS.length)];
+const looksEl = $('looks');
+for (const l of LOOKS) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'look';
+  b.setAttribute('aria-label', `${l.startsWith('female') ? 'Woman' : 'Man'} ${l.slice(-1).toUpperCase()}`);
+  const img = document.createElement('img');
+  img.src = `${import.meta.env.BASE_URL}characters/previews/${l}.png`;
+  img.alt = '';
+  b.append(img);
+  b.dataset.look = l;
+  b.onclick = () => {
+    look = l;
+    paintLooks();
+  };
+  // Women on the first row, men on the second, each with a small heading.
+  const row = l.startsWith('female') ? 'Women' : 'Men';
+  let group = looksEl.querySelector<HTMLElement>(`[data-row="${row}"]`);
+  if (!group) {
+    group = document.createElement('div');
+    group.className = 'look-row';
+    group.dataset.row = row;
+    const heading = document.createElement('span');
+    heading.textContent = row;
+    group.append(heading);
+    looksEl.append(group);
+  }
+  group.append(b);
+}
+function paintLooks() {
+  for (const el of looksEl.querySelectorAll<HTMLElement>('.look')) {
+    el.classList.toggle('picked', el.dataset.look === look);
+    el.setAttribute('aria-pressed', String(el.dataset.look === look));
+  }
+}
+paintLooks();
 nameInput.value = store.get('name') ?? '';
 nameInput.focus();
 
@@ -602,6 +642,7 @@ joinForm.onsubmit = (e) => {
   if (!name) return;
   store.set('name', name);
   store.set('color', color);
+  store.set('look', look);
   joinError.hidden = true;
   joinButton.disabled = true;
 
@@ -619,7 +660,7 @@ let backTo: { x: number; z: number; ry: number } | null = null;
 function connect() {
   const socket = new WebSocket(wsUrl);
   ws = socket;
-  socket.onopen = () => send({ t: 'join', name: joinName, color, password: passwordInput.value || undefined });
+  socket.onopen = () => send({ t: 'join', name: joinName, color, look, password: passwordInput.value || undefined });
   socket.onmessage = (ev) => {
     try {
       handle(JSON.parse(ev.data as string));
@@ -1096,6 +1137,7 @@ if (import.meta.env.DEV) {
     ball: () => ({ ...games.ball }),
     id: () => myId,
     dropRoom: () => ws?.close(),
+    looks: () => Object.fromEntries([...avatars].map(([id, a]) => [id, a.info.look])),
     table: (id: string) => tableViews.get(id) ?? null,
     where: (id: string) => {
       const a = avatars.get(id);
