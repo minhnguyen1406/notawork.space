@@ -1,6 +1,8 @@
 import { EMOTES, NPC_ID, workWord } from '../../shared/fun';
 import { Npc } from './npc';
 import { Duels } from './duels';
+import { SERVER_GAMES } from './minigames/registry';
+import type { RoomEvent, ServerGame } from './minigames/api';
 import { DurableObject } from 'cloudflare:workers';
 import {
   COLORS,
@@ -59,6 +61,10 @@ interface Player extends PlayerInfo {
 }
 
 const clamp = (v: unknown, limit: number) => range(v, -limit, limit);
+const CENTRE_X = (BOUNDS.x1 + BOUNDS.x2) / 2;
+const CENTRE_Z = (BOUNDS.z1 + BOUNDS.z2) / 2;
+const HALF_X = (BOUNDS.x2 - BOUNDS.x1) / 2 - 0.7;
+const HALF_Z = (BOUNDS.z2 - BOUNDS.z1) / 2 - 0.7;
 const range = (v: unknown, lo: number, hi: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : Math.max(lo, Math.min(hi, 0));
 const clean = (v: unknown, max: number) =>
@@ -89,6 +95,53 @@ export class Room extends DurableObject<Env> {
     },
     broadcast: (msg) => this.broadcast(msg),
   });
+
+  /** The party games (worker/src/minigames). Each gets its own channel to the room. */
+  private mini = new Map<string, ServerGame>(
+    Object.entries(SERVER_GAMES).map(([id, create]) => [
+      id,
+      create({
+        players: () => this.everyone().map(publicInfo),
+        send: (pid, view) => {
+          for (const p of this.players.values()) if (p.id === pid) this.send(p.ws, { t: 'play', game: id, view });
+        },
+        broadcast: (view) => this.broadcast({ t: 'play', game: id, view }),
+        notice: (text) => this.broadcast({ t: 'notice', text }),
+        emote: (pid, k) => this.broadcast({ t: 'emote', id: pid, k }),
+        put: (pid, x, z) => {
+          for (const p of this.players.values()) {
+            if (p.id !== pid) continue;
+            p.x = clamp(x - CENTRE_X, HALF_X) + CENTRE_X;
+            p.z = clamp(z - CENTRE_Z, HALF_Z) + CENTRE_Z;
+            this.moved = true;
+            this.send(p.ws, { t: 'put', x: p.x, z: p.z });
+          }
+        },
+        nudge: (pid, dx, dz) => {
+          for (const p of this.players.values()) if (p.id === pid) this.send(p.ws, { t: 'put', dx: clamp(dx, 2), dz: clamp(dz, 2) });
+        },
+        resetBall: () => {
+          this.games.ball = centreBall();
+          this.broadcast({ t: 'ball', ball: this.games.ball });
+        },
+        setScore: (red, blue) => {
+          this.games.score = [Math.max(0, Math.floor(red)), Math.max(0, Math.floor(blue))];
+          this.broadcast({ t: 'score', score: this.games.score });
+        },
+      }),
+    ]),
+  );
+  /** Tell every game about something that happened in the room. A game that throws must not take the room down. */
+  private miniEvent(e: RoomEvent) {
+    for (const g of this.mini.values()) this.safely(() => g.onEvent?.(e, Date.now()));
+  }
+  private safely(fn: () => void) {
+    try {
+      fn();
+    } catch (err) {
+      console.error('minigame failed', err);
+    }
+  }
 
   /** Claude's chat lines go out a moment apart, so they read as speech rather than a burst. */
   private npcLines: string[] = [];
@@ -196,6 +249,7 @@ export class Room extends DurableObject<Env> {
     delete this.kitchen.held[p.id];
     this.broadcast({ t: 'leave', id: p.id });
     this.duels.left(p.id, Date.now());
+    for (const g of this.mini.values()) this.safely(() => g.onLeave(p.id, Date.now()));
     if (wasHolding) this.sendKitchen();
     const seat = p.seat;
     p.seat = null;
@@ -219,6 +273,7 @@ export class Room extends DurableObject<Env> {
     if (goal) {
       // The west goal is Red's, so a ball in it is a goal for Blue.
       this.games.score[goal === 'west' ? 1 : 0]++;
+      this.miniEvent({ kind: 'goal', side: goal === 'west' ? 'blue' : 'red', by: this.lastKicker });
       this.games.ball = centreBall();
       const [red, blue] = this.games.score;
       this.broadcast({ t: 'score', score: this.games.score });
@@ -232,6 +287,7 @@ export class Room extends DurableObject<Env> {
     this.tickBall();
     if (this.npc.tick(1 / TICK_HZ)) this.moved = true;
     this.duels.tick(Date.now());
+    for (const g of this.mini.values()) this.safely(() => g.tick?.(Date.now()));
     if (this.npcLines.length && this.ticks % 8 === 0) {
       this.broadcast({ t: 'chat', id: NPC_ID, name: this.npc.info.name, text: this.npcLines.shift()! });
     }
@@ -287,6 +343,13 @@ export class Room extends DurableObject<Env> {
         break;
       }
 
+      case 'play': {
+        const g = typeof msg.game === 'string' ? this.mini.get(msg.game) : undefined;
+        const a = msg.a;
+        if (g && a && typeof a === 'object' && !Array.isArray(a)) this.safely(() => g.onAction(publicInfo(me), a as Record<string, unknown>, Date.now()));
+        break;
+      }
+
       case 'duel':
         this.duels.handle(publicInfo(me), msg, Date.now());
         break;
@@ -332,7 +395,10 @@ export class Room extends DurableObject<Env> {
         const result = useStation(this.kitchen, me.id, st, Date.now());
         if (!result.changed) return;
         this.sendKitchen();
-        if (result.served) this.broadcast({ t: 'notice', text: `${me.name} served a ${result.served}` });
+        if (result.served) {
+          this.broadcast({ t: 'notice', text: `${me.name} served a ${result.served}` });
+          this.miniEvent({ kind: 'serve', id: me.id, name: me.name, dish: result.served });
+        }
         break;
       }
 
@@ -473,6 +539,7 @@ export class Room extends DurableObject<Env> {
     this.refreshBoard();
     this.broadcast({ t: 'join', player: publicInfo(me) }, ws);
     this.npc.greet(me.name, Date.now());
+    for (const g of this.mini.values()) this.safely(() => g.onJoin?.(publicInfo(me), Date.now()));
     this.timer ??= setInterval(() => this.tick(), 1000 / TICK_HZ);
   }
 }

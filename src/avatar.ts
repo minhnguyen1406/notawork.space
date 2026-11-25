@@ -285,6 +285,28 @@ export class Avatar {
     this.video = { holder, tex, el, ring, face, aspect: 0 };
   }
 
+  private badge: THREE.Sprite | null = null;
+  private badgeShown = '';
+  /** A lasting marker over the head (an emoji such as '🏃' for whoever is "it"), or null to remove it. */
+  setBadge(emoji: string | null) {
+    if ((emoji ?? '') === this.badgeShown) return;
+    this.badgeShown = emoji ?? '';
+    if (this.badge) disposeSprite(this.badge);
+    this.badge = null;
+    if (!emoji) return;
+    this.badge = emojiSprite(emoji, 0.8);
+    this.badge.position.y = 3.95;
+    this.group.add(this.badge);
+  }
+
+  /** Hide or show the name tag (hide and seek). */
+  setNameHidden(hidden: boolean) {
+    this.nameHidden = hidden;
+    this.label.visible = !hidden && !this.speaking;
+    this.talkLabel.visible = !hidden && this.speaking;
+  }
+  private nameHidden = false;
+
   private actClip = '';
   private actUntil = 0;
   /** Play a one-off animation (a swing, a stagger, falling over) for a moment. */
@@ -316,8 +338,8 @@ export class Avatar {
   /** Mark this person as talking (or not): a speaker icon, a pulsing green ring, and the camera rim. */
   setSpeaking(on: boolean) {
     this.speaking = on;
-    this.label.visible = !on;
-    this.talkLabel.visible = on;
+    this.label.visible = !on && !this.nameHidden;
+    this.talkLabel.visible = on && !this.nameHidden;
     for (const w of this.waves) w.visible = on;
     (this.footRing.material as THREE.MeshBasicMaterial).color.set(on ? '#5dff6e' : this.info.color);
     if (this.video) (this.video.ring.material as THREE.MeshBasicMaterial).color.set(on ? '#9be564' : this.info.color);

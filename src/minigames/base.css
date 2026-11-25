@@ -1,0 +1,94 @@
+/* Shared look for the party games. Each game's box is a .mg element inside #minigames.
+   Add "mg-card" for a compact card at the bottom of the screen, or "mg-sheet" for a large
+   centred sheet (card and board games). Put game-specific rules in src/minigames/<id>.css,
+   with every selector starting .mg-<id> so games can't restyle each other. */
+#minigames {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 23;
+}
+.mg {
+  pointer-events: auto;
+  position: absolute;
+  background: rgba(20, 15, 26, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px 18px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+}
+.mg-card {
+  left: 50%;
+  bottom: 62px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 28px));
+  text-align: center;
+}
+.mg-sheet {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(880px, calc(100vw - 28px));
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+.mg h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+.mg p {
+  margin: 6px 0;
+}
+.mg .mg-muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+.mg .mg-status {
+  color: var(--accent-2);
+  min-height: 1.4em;
+}
+.mg .mg-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  margin-top: 10px;
+}
+.mg button {
+  backdrop-filter: none;
+}
+.mg button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.mg .mg-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.mg .mg-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin: 8px 0;
+}
+.mg .mg-chip {
+  background: rgba(255, 233, 201, 0.1);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 13px;
+}
+.mg .mg-chip.me {
+  outline: 2px solid var(--accent-2);
+}
+.mg .mg-chip.turn {
+  background: var(--accent-2);
+  color: #2a1a00;
+  font-weight: 700;
+}

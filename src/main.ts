@@ -1,3 +1,6 @@
+import { CLIENT_GAMES } from './minigames/registry';
+import type { ClientGame } from './minigames/api';
+import { GAME_SPOTS, type GameId } from '../shared/minigames';
 import { DuelUI } from './duel';
 import { DUEL_REACH } from '../shared/duel';
 import { NPC_ID } from '../shared/fun';
@@ -34,8 +37,8 @@ import { TableUI } from './tables';
 import { isTable } from '../shared/tables';
 import { seatLabel } from '../shared/layout';
 import { ING_LABEL, RECIPES } from '../shared/kitchen';
-import { buildWorld } from './world';
-import { Avatar } from './avatar';
+import { box, buildWorld } from './world';
+import { Avatar, textSprite } from './avatar';
 import { KitchenView } from './kitchen';
 import { Media, type Near } from './media';
 
@@ -469,6 +472,48 @@ for (const b of [btnMic, btnCam, btnShare]) b.hidden = true;
 let lastScoreTotal = 0;
 const duelUI = new DuelUI(world.scene, avatars, () => myId, (m) => send(m));
 
+// ---------------------------------------------------------------- party games (src/minigames)
+/** Set by a game to root me to the spot, or change how fast I walk. */
+let miniFrozen = false;
+let miniSpeed = 1;
+const miniGames = Object.entries(CLIENT_GAMES) as [GameId, ClientGame][];
+for (const [id, game] of miniGames) {
+  const panel = document.createElement('div');
+  panel.className = `mg mg-${id}`;
+  panel.hidden = true;
+  $('minigames').append(panel);
+  // A signpost: walk up and press E.
+  const spot = GAME_SPOTS[id];
+  const post = box(0.14, 1.5, 0.14, '#3a2f3c', spot.x, 0.75, spot.z);
+  const sign = textSprite(spot.title, 0.36, { bg: 'rgba(243, 167, 18, 0.95)', fg: '#2a1a00' });
+  sign.position.set(spot.x, 1.85, spot.z);
+  post.userData.walkThrough = true;
+  world.scene.add(post, sign);
+  game.init({
+    scene: world.scene,
+    avatars,
+    myId: () => myId,
+    me: () => me,
+    send: (a) => send({ t: 'play', game: id, a }),
+    toast: (text) => toast(text),
+    panel,
+    confetti,
+    play,
+    freeze: (on) => (miniFrozen = on),
+    speed: (mult) => (miniSpeed = Math.max(0, Math.min(3, mult))),
+    put: (x, z) => me?.place(x, z, me.ry),
+  });
+}
+/** The game whose signpost I'm standing at, if any. */
+function nearGame(): [GameId, ClientGame] | null {
+  if (!me || me.seat) return null;
+  for (const entry of miniGames) {
+    const s = GAME_SPOTS[entry[0]];
+    if (Math.hypot(s.x - me.x, s.z - me.z) < 2) return entry;
+  }
+  return null;
+}
+
 // Playing chess against the built-in Claude character: its moves are worked out here, in the
 // browser of whoever is sitting opposite, and sent to the server (which checks they are legal).
 let chessBrain: Worker | null = null;
@@ -571,6 +616,16 @@ function handle(msg: ServerMsg) {
       break;
     case 'duel':
       duelUI.update(msg.duel, msg.id);
+      break;
+    case 'play':
+      CLIENT_GAMES[msg.game as GameId]?.onView(msg.view);
+      break;
+    case 'put':
+      if (me) {
+        if (typeof msg.x === 'number' && typeof msg.z === 'number') me.place(msg.x, msg.z, me.ry);
+        else me.place(me.x + (msg.dx ?? 0), me.z + (msg.dz ?? 0), me.ry);
+        velX = velZ = 0;
+      }
       break;
     case 'duelAsk':
       duelUI.ask(msg.from, msg.name);
@@ -749,6 +804,9 @@ function lostRoom() {
   for (const id of [...avatars.keys()]) removeAvatar(id);
   cams.clear();
   duelUI.clear();
+  miniFrozen = false;
+  miniSpeed = 1;
+  for (const [, g] of miniGames) g.reset?.();
   tableViews.clear();
   mediaRound++;
   const old = media;
@@ -858,6 +916,10 @@ function interact() {
     return;
   }
   const t = nearest();
+  if (!t) {
+    nearGame()?.[1].open();
+    return;
+  }
   if (t?.seat) send({ t: 'sit', seat: t.seat.id });
   else if (t?.spot?.id === 'race') startRace();
   else if (t?.spot) send({ t: 'spot', id: t.spot.id });
@@ -874,6 +936,8 @@ addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   // With the guide open, only the keys that close it do anything.
   if (!guideEl.hidden && e.code !== 'KeyH' && e.code !== 'Escape') return;
+  // A party game may want this key (number keys to answer, Escape to close its panel).
+  if (!e.repeat) for (const [, g] of miniGames) if (g.key?.(e.code)) return;
   switch (e.code) {
     case 'Enter':
       if (e.target instanceof HTMLButtonElement) return; // let Enter press the focused button
@@ -1124,8 +1188,8 @@ function moveMe(dt: number) {
   const r = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
   const moving = f !== 0 || r !== 0;
 
-  if (duelUI.mine()) {
-    // Feet planted while you fight.
+  if (duelUI.mine() || miniFrozen) {
+    // Feet planted while you fight (or while a game says so).
     velX = velZ = 0;
     me.walking = false;
     return;
@@ -1152,7 +1216,7 @@ function moveMe(dt: number) {
     dz /= len;
   }
   const running = keys.has('ShiftLeft') || keys.has('ShiftRight');
-  const speed = moving ? (running ? RUN : WALK) : 0;
+  const speed = moving ? (running ? RUN : WALK) * miniSpeed : 0;
   // Ease towards that speed instead of jumping to it: a quick lean in, a slightly quicker stop.
   const ease = 1 - Math.exp(-(moving ? 13 : 17) * dt);
   velX += (dx * speed - velX) * ease;
@@ -1318,6 +1382,7 @@ function frame(nowMs: number) {
   tickRace();
   for (const a of avatars.values()) a.update(dt, camera);
   duelUI.frame();
+  for (const [, g] of miniGames) g.frame?.(dt, time);
 
   if (me) {
     camFocus.lerp(new THREE.Vector3(me.x, 1.6, me.z), 1 - Math.exp(-12 * dt));
@@ -1361,8 +1426,9 @@ function frame(nowMs: number) {
       menuEl.hidden = me.x < 10 || me.z < -6 || me.z > 12 || !!me.seat;
 
       const t = me.seat ? null : nearest();
-      const rival = !t && !me.seat ? duelTarget() : null;
-      const text = me.seat ? (myGridGroup() ? '' : 'E — stand up') : t ? promptFor(t) : rival ? `G — challenge ${rival.info.name} to a duel` : '';
+      const spot = !t ? nearGame() : null;
+      const rival = !t && !spot && !me.seat ? duelTarget() : null;
+      const text = me.seat ? (myGridGroup() ? '' : 'E — stand up') : t ? promptFor(t) : spot ? `E — ${GAME_SPOTS[spot[0]].title}` : rival ? `G — challenge ${rival.info.name} to a duel` : '';
       promptEl.textContent = text;
       promptEl.hidden = !text || !theaterEl.hidden;
     }

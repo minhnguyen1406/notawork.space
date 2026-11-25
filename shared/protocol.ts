@@ -52,6 +52,8 @@ export type ClientMsg =
   | { t: 'chat'; text: string }
   /** A reaction over your head, a dance, or a snooze (see shared/fun.ts). */
   | { t: 'emote'; k: string }
+  /** An action in one of the party games (see shared/minigames.ts). */
+  | { t: 'play'; game: string; a: unknown }
   /** Duels: challenge someone nearby, answer a challenge, choose a move, or give up. */
   | { t: 'duel'; a: 'challenge' | 'accept' | 'decline' | 'pick' | 'quit'; to?: string; move?: string }
   | { t: 'sit'; seat: string | null }
@@ -86,6 +88,10 @@ export type ServerMsg =
   | { t: 'kitchen'; state: KitchenState }
   | { t: 'notice'; text: string }
   | { t: 'emote'; id: string; k: string }
+  /** A party game's state, for you or for everyone. */
+  | { t: 'play'; game: string; view: unknown }
+  /** The server is moving you: to a spot (x, z), or by a small shove (dx, dz). */
+  | { t: 'put'; x?: number; z?: number; dx?: number; dz?: number }
   /** A duel started or moved on (duel), or was cleared away (duel null, with its id). */
   | { t: 'duel'; duel: DuelView | null; id?: number }
   /** Someone has challenged you. */
