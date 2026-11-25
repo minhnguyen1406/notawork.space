@@ -185,17 +185,22 @@ export class Games {
 
   /** The server's word on where the ball is. Small differences are blended so it doesn't jump. */
   syncBall(b: BallState) {
+    // This browser predicts the ball itself, so the server's word is blended in gently: a hard
+    // correction ten times a second is what made the ball judder.
     const off = Math.hypot(b.x - this.ball.x, b.z - this.ball.z);
-    const k = off > 2 ? 1 : 0.5;
+    const k = off > 2.5 ? 1 : 0.18;
     this.ball.x += (b.x - this.ball.x) * k;
     this.ball.z += (b.z - this.ball.z) * k;
+    this.ball.y += (b.y - this.ball.y) * (off > 2.5 ? 1 : 0.3);
     this.ball.vx = b.vx;
     this.ball.vz = b.vz;
+    this.ball.vy = b.vy;
   }
 
-  kick(vx: number, vz: number) {
+  kick(vx: number, vz: number, vy = 0) {
     this.ball.vx = vx;
     this.ball.vz = vz;
+    if (this.ball.y < 0.3) this.ball.vy = vy;
   }
 
   // ------------------------------------------------------------ lap race
@@ -477,7 +482,7 @@ export class Games {
     const { ball } = this;
     const speed = Math.hypot(ball.vx, ball.vz);
     if (stepBall(ball, dt)) ball.vx = ball.vz = 0;
-    this.ballMesh.position.set(ball.x, BALL_R, ball.z);
+    this.ballMesh.position.set(ball.x, BALL_R + ball.y, ball.z);
     if (speed > 0.01) {
       const axis = new THREE.Vector3(ball.vz, 0, -ball.vx).normalize();
       this.ballMesh.rotateOnWorldAxis(axis, (speed * dt) / BALL_R);

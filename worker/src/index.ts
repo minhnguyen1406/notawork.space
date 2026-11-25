@@ -14,7 +14,7 @@ import {
   type ServerMsg,
 } from '../../shared/protocol';
 import { BOUNDS, SEATS, SPAWN, SPOTS, STATIONS } from '../../shared/layout';
-import { ballMoving, centreBall, MAX_KICK, stepBall } from '../../shared/ball';
+import { ballMoving, centreBall, MAX_KICK, stepBall, MAX_LIFT } from '../../shared/ball';
 import { Tables } from './tables';
 import { actStation, newKitchen, useStation, type KitchenState } from '../../shared/kitchen';
 
@@ -330,6 +330,8 @@ export class Room extends DurableObject<Env> {
         }
         ball.vx = vx;
         ball.vz = vz;
+        // Lift only counts from the ground: no juggling the ball higher and higher.
+        if (ball.y < 0.3) ball.vy = range(msg.vy, 0, MAX_LIFT);
         this.lastKicker = me.name;
         this.broadcast({ t: 'ball', ball }, ws);
         break;

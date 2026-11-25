@@ -1,5 +1,6 @@
 import type { ChessView } from '../shared/tables';
 import * as THREE from 'three';
+import { MAX_KICK, MAX_LIFT } from '../shared/ball';
 import { sceneColliders, showColliders } from './collide';
 import { confetti, flash, play } from './fun';
 import { EMOJI } from '../shared/fun';
@@ -805,6 +806,10 @@ addEventListener('keydown', (e) => {
         applyMic();
       }
       return;
+    case 'Space':
+      e.preventDefault();
+      if (!e.repeat) shoot();
+      return;
     case 'KeyI':
       if (!e.repeat) toggleInfo();
       return;
@@ -960,6 +965,7 @@ function tickRace() {
 }
 
 let lastKick = 0;
+let lastShot = 0;
 const inside = (c: Collider, x: number, z: number) =>
   Math.abs(x - c.x) < c.hw + BODY && Math.abs(z - c.z) < c.hd + BODY;
 /** Would moving to (x, z) walk into something? Things you already overlap (the chair you just stood up from) don't count. */
@@ -1029,23 +1035,55 @@ function moveMe(dt: number) {
     dz = velZ / pace;
   }
 
-  // Football: walking into the ball kicks it, mostly away from you and a little the way you're heading.
+  // Football. Walking or running into the ball dribbles it: it takes on your movement and rolls a
+  // little ahead of you. (Space shoots; see shoot().)
   const ball = games.ball;
   const bx = ball.x - me.x;
   const bz = ball.z - me.z;
   const gap = Math.hypot(bx, bz);
   const now = performance.now();
-  if (gap < BODY + BALL_R + 0.15 && gap > 0.001 && now - lastKick > 180) {
-    lastKick = now;
-    let kx = (bx / gap) * 0.65 + dx * 0.35;
-    let kz = (bz / gap) * 0.65 + dz * 0.35;
-    const kl = Math.hypot(kx, kz) || 1;
-    const power = running ? 14 : 9;
-    kx = (kx / kl) * power;
-    kz = (kz / kl) * power;
-    games.kick(kx, kz);
-    send({ t: 'kick', vx: +kx.toFixed(2), vz: +kz.toFixed(2) });
+  if (gap < BODY + BALL_R + 0.08 && gap > 0.001 && ball.y < 1.1 && now - lastKick > 90) {
+    const nx = bx / gap;
+    const nz = bz / gap;
+    const into = velX * nx + velZ * nz; // how fast I'm moving towards the ball
+    if (into > 0.3) {
+      lastKick = now;
+      // Just a touch faster than you, so it rolls a step ahead and you catch it up.
+      const push = Math.max(into, 1.8);
+      const kx = velX * 0.55 + nx * push * 0.55;
+      const kz = velZ * 0.55 + nz * push * 0.55;
+      games.kick(kx, kz);
+      send({ t: 'kick', vx: +kx.toFixed(2), vz: +kz.toFixed(2) });
+    }
   }
+}
+
+/** Space: strike the ball if it is at your feet. Harder when you're running, and it lifts off the grass. */
+function shoot() {
+  if (!me || me.seat) return;
+  const ball = games.ball;
+  const bx = ball.x - me.x;
+  const bz = ball.z - me.z;
+  const gap = Math.hypot(bx, bz);
+  const now = performance.now();
+  if (gap > 2 || gap < 0.001 || ball.y > 1.2 || now - lastShot < 350) return;
+  const faceX = Math.sin(me.ry);
+  const faceZ = Math.cos(me.ry);
+  // The ball has to be in front of you, not behind your heels.
+  if ((bx / gap) * faceX + (bz / gap) * faceZ < 0.15) return;
+  lastShot = now;
+  lastKick = now + 250; // no dribble touch straight after, which would cancel the shot
+  const pace = Math.hypot(velX, velZ);
+  const power = Math.min(MAX_KICK, 12.5 + pace * 0.75);
+  // Mostly where you're facing, bent a little by where the ball actually is.
+  let kx = faceX * 0.75 + (bx / gap) * 0.25;
+  let kz = faceZ * 0.75 + (bz / gap) * 0.25;
+  const kl = Math.hypot(kx, kz) || 1;
+  kx = (kx / kl) * power;
+  kz = (kz / kl) * power;
+  const lift = Math.min(MAX_LIFT, 5 + pace * 0.4);
+  games.kick(kx, kz, lift);
+  send({ t: 'kick', vx: +kx.toFixed(2), vz: +kz.toFixed(2), vy: +lift.toFixed(2) });
 }
 
 // Local development only: lets automated tests place the player. Removed from production builds.

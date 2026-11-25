@@ -49,7 +49,7 @@ export type ClientMsg =
   | { t: 'sit'; seat: string | null }
   | { t: 'use'; station: string }
   | { t: 'act'; station: string }
-  | { t: 'kick'; vx: number; vz: number }
+  | { t: 'kick'; vx: number; vz: number; vy?: number }
   | { t: 'spot'; id: string }
   | { t: 'lap'; ms: number }
   | { t: 'game'; table: string; a: unknown }
