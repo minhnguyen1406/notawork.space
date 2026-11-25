@@ -230,6 +230,9 @@ export const MAST_H = 15;
 /** The hanging scoreboard. */
 export const BILLBOARD = { x: 0, y: 12.6, z: 2, w: 6.4, h: 3.6 };
 
+/** Wall boards either side of the cinema screen, where the usual camera can read them. */
+export const NEWS_WALL = { x: 12.4, y: 3.5, w: 7.2, h: 4.05 };
+
 /** The pergola over the kitchen. */
 export const PERGOLA = { x1: 10.7, x2: 19.9, z1: -5.5, z2: 11.5, h: 4.5 };
 export const PERGOLA_POSTS: { x: number; z: number }[] = [

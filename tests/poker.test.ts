@@ -142,3 +142,51 @@ const cur = (g: PokerGame) => g.seats[g.turn].id;
   check('min raise constant', BIG_BLIND === 20);
 }
 
+
+test('chips are never created or lost, whatever people do (random play with folds and walk-outs)', () => {
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  for (let hand = 0; hand < 3000; hand++) {
+    const g = newPoker();
+    const who = players(2 + Math.floor(rnd() * 3));
+    // Uneven stacks so that side pots happen.
+    for (const p of who) g.bank[p.id] = [60, 200, 1000, 1500][Math.floor(rnd() * 4)];
+    pokerStart(g, who);
+    const before = total(g);
+    for (let step = 0; step < 200 && g.phase !== 'showdown'; step++) {
+      const roll = rnd();
+      if (roll < 0.06) {
+        pokerLeave(g, who[Math.floor(rnd() * who.length)].id);
+        continue;
+      }
+      const s = g.seats[g.turn];
+      if (roll < 0.3) pokerAct(g, s.id, { k: 'fold' });
+      else if (roll < 0.75 || !pokerAct(g, s.id, { k: 'raise', to: Math.min(s.bet + s.chips, g.currentBet + g.minRaise * (1 + Math.floor(rnd() * 5))) }))
+        pokerAct(g, s.id, { k: 'call' });
+    }
+    expect(g.phase).toBe('showdown');
+    expect(total(g)).toBe(before);
+  }
+});
+
+test("a bet left behind by someone who walks out still goes to the winners", () => {
+  const g = newPoker();
+  const who = players(4); // Ann and Dung are deep, Bao and Chi are short
+  Object.assign(g.bank, { ann: 1000, bao: 60, chi: 60, dung: 1000 });
+  pokerStart(g, who);
+  const before = total(g);
+  // Before the flop everyone gets 60 in, which puts Bao and Chi all-in.
+  for (let i = 0; i < 20 && g.phase === 'preflop'; i++) {
+    const s = g.seats[g.turn];
+    if (g.currentBet < 60) pokerAct(g, s.id, { k: 'raise', to: 60 });
+    else pokerAct(g, s.id, { k: 'call' });
+  }
+  expect(g.phase).toBe('flop');
+  // On the flop Dung bets 200 and walks away; Ann, facing the bet, folds.
+  if (cur(g) === 'ann') pokerAct(g, 'ann', { k: 'call' });
+  expect(pokerAct(g, 'dung', { k: 'raise', to: 200 })).toBe(true);
+  pokerLeave(g, 'dung');
+  expect(pokerAct(g, 'ann', { k: 'fold' })).toBe(true);
+  expect(g.phase).toBe('showdown');
+  expect(total(g)).toBe(before);
+});

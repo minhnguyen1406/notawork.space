@@ -185,6 +185,19 @@ function remove(g: PhoGame, pid: string) {
     // The seat that held the turn is gone, so the same index is now the next player.
     g.phase = 'roll';
     g.die = null;
+    g.turn = (g.turn - 1 + g.order.length) % g.order.length;
+    passTurn(g);
+  }
+}
+
+/** Move to the next player, passing over anyone stuck in traffic (which uses up their jam). */
+function passTurn(g: PhoGame) {
+  for (let n = 0; n < g.order.length; n++) {
+    g.turn = (g.turn + 1) % g.order.length;
+    const next = phoCurrent(g);
+    if (!g.skip[next]) break;
+    g.skip[next] = false;
+    say(g, `${g.names[next]} is still in traffic and misses this turn.`);
   }
 }
 
@@ -340,14 +353,7 @@ export function phoEnd(g: PhoGame, pid: string): boolean {
   if (g.phase !== 'end' || phoCurrent(g) !== pid) return false;
   g.die = null;
   g.phase = 'roll';
-  // Move to the next player, passing over anyone stuck in traffic (which uses up their jam).
-  for (let n = 0; n < g.order.length; n++) {
-    g.turn = (g.turn + 1) % g.order.length;
-    const next = phoCurrent(g);
-    if (!g.skip[next]) break;
-    g.skip[next] = false;
-    say(g, `${g.names[next]} is still in traffic and misses this turn.`);
-  }
+  passTurn(g);
   return true;
 }
 

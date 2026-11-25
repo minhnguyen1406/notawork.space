@@ -95,6 +95,10 @@ export class Room extends DurableObject<Env> {
     const client = pair[0];
     const server = pair[1];
     server.accept();
+    // A socket that never joins is closed, so idle connections can't pile up.
+    setTimeout(() => {
+      if (!this.players.has(server)) this.drop(server);
+    }, JOIN_TIMEOUT_MS);
     server.addEventListener('message', (e) => {
       this.onMessage(server, e.data).catch((err) => console.error('message failed', err));
     });
@@ -326,7 +330,11 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  /** Sockets part-way through joining, so a second join message can't create a second player. */
+  private joining = new Set<WebSocket>();
+
   private async join(ws: WebSocket, msg: Extract<ClientMsg, { t: 'join' }>) {
+    if (this.joining.has(ws)) return;
     const password = this.env.ROOM_PASSWORD;
     if (password && msg.password !== password) {
       this.send(ws, { t: 'denied', reason: 'password' });
@@ -355,7 +363,17 @@ export class Room extends DurableObject<Env> {
     let media: { url: string; token: string } | null = null;
     const { LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = this.env;
     if (LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET) {
-      media = { url: LIVEKIT_URL, token: await livekitToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, me.id, me.name) };
+      this.joining.add(ws);
+      try {
+        media = { url: LIVEKIT_URL, token: await livekitToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, me.id, me.name) };
+      } finally {
+        this.joining.delete(ws);
+      }
+      // The socket may have closed, or the room filled, while the token was being signed.
+      if (ws.readyState !== WebSocket.OPEN || this.players.size >= MAX_PLAYERS) {
+        this.drop(ws);
+        return;
+      }
     }
 
     this.players.set(ws, me);
@@ -410,6 +428,8 @@ async function livekitToken(apiKey: string, apiSecret: string, identity: string,
 // --- Billboard data: headlines from RSS feeds, prices from a quote API. No keys needed by default.
 
 const BOARD_TTL_MS = 10 * 60_000;
+const JOIN_TIMEOUT_MS = 15_000;
+const FETCH_TIMEOUT_MS = 8000;
 const FEEDS = [
   { src: 'BBC World', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
   { src: 'VnExpress', url: 'https://e.vnexpress.net/rss/news.rss' },
@@ -428,10 +448,11 @@ const SYMBOLS: { sym: string; label: string }[] = [
 ];
 const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; billboard)' };
 
+const codePoint = (n: number) => (n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '');
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 const decode = (s: string) =>
   s
-    .replace(/&#(x?)([0-9a-f]+);/gi, (_, hex, n) => String.fromCodePoint(parseInt(n, hex ? 16 : 10)))
+    .replace(/&#(x?)([0-9a-f]+);/gi, (_, hex, n) => codePoint(parseInt(n, hex ? 16 : 10)))
     .replace(/&([a-z]+);/gi, (m, name) => ENTITIES[name.toLowerCase()] ?? m);
 
 function parseTitles(xml: string, max: number): string[] {
@@ -446,14 +467,16 @@ function parseTitles(xml: string, max: number): string[] {
 
 async function quote(sym: string, finnhubKey?: string): Promise<{ price: number; pct: number } | null> {
   if (finnhubKey && !sym.startsWith('^')) {
-    const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${finnhubKey}`);
+    const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${finnhubKey}`, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (!r.ok) return null;
     const q = (await r.json()) as { c?: number; dp?: number };
     return q.c ? { price: q.c, pct: q.dp ?? 0 } : null;
   }
   const r = await fetch(
     `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`,
-    { headers: UA },
+    { headers: UA, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
   );
   if (!r.ok) return null;
   const j = (await r.json()) as {
@@ -470,7 +493,7 @@ async function loadBoard(finnhubKey: string | undefined, old: Board): Promise<Bo
   const feeds = await Promise.all(
     FEEDS.map(async (f) => {
       try {
-        const r = await fetch(f.url, { headers: UA });
+        const r = await fetch(f.url, { headers: UA, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (!r.ok) return [];
         return parseTitles(await r.text(), HEADLINES_PER_FEED).map((title) => ({ src: f.src, title }));
       } catch {

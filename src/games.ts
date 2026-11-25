@@ -82,6 +82,7 @@ export class Games {
       patch.lookAt(x * 2, y * 2, z * 2);
       this.ballMesh.add(patch);
     }
+    this.ballMesh.userData.walkThrough = true;
     scene.add(this.ballMesh);
 
     this.drawScore([0, 0]);

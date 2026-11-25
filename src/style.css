@@ -86,8 +86,8 @@ input::placeholder {
   backdrop-filter: blur(6px);
   z-index: 30;
 }
-.card {
-  width: min(400px, 100%);
+.join-card {
+  width: min(400px, calc(100vw - 32px));
   background: var(--panel-solid);
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -97,22 +97,22 @@ input::placeholder {
   gap: 8px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
-.card h1 {
+.join-card h1 {
   margin: 0;
   font-size: 28px;
   letter-spacing: -0.01em;
 }
-.card .sub {
+.join-card .sub {
   margin: 0 0 10px;
   color: var(--muted);
 }
-.card label,
+.join-card label,
 .field-label {
   font-size: 14px;
   color: var(--muted);
   margin-top: 8px;
 }
-.card button[type='submit'] {
+.join-card button[type='submit'] {
   margin-top: 14px;
   background: var(--accent);
   border-color: transparent;
@@ -120,7 +120,7 @@ input::placeholder {
   padding: 12px;
   border-radius: 12px;
 }
-.card button[type='submit']:disabled {
+.join-card button[type='submit']:disabled {
   opacity: 0.6;
   cursor: wait;
 }
@@ -172,7 +172,7 @@ input::placeholder {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 10;
+  z-index: 16; /* above the sit-down panel, so chat stays usable at a table */
 }
 #chat-log {
   max-height: 34vh;

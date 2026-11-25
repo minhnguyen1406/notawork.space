@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Board } from '../shared/protocol';
 import {
   BILLBOARD,
+  NEWS_WALL,
   BOUNDS,
   CENTRE,
   DINING,
@@ -294,6 +295,14 @@ export function buildWorld(): World {
   // --- Masts, cables and string lights; the billboard hangs from the cables.
   const billboard = new Billboard();
   scene.add(billboard.group);
+  for (const [kind, side] of [['news', -1], ['stocks', 1]] as const) {
+    const panel = billboard.panel(kind, NEWS_WALL.w, NEWS_WALL.h);
+    panel.position.set(side * NEWS_WALL.x, NEWS_WALL.y, SCREEN.z + 0.2);
+    scene.add(panel);
+    for (const dx of [-1, 1]) {
+      scene.add(box(0.3, NEWS_WALL.y, 0.3, '#2a2230', side * NEWS_WALL.x + dx * (NEWS_WALL.w / 2 - 0.6), NEWS_WALL.y / 2, SCREEN.z - 0.1));
+    }
+  }
   const bulbs: THREE.Mesh[] = [];
   const bulbGeo = new THREE.SphereGeometry(0.13, 6, 5);
   const bulbMats = ['#ffd27a', '#ff8a6b', '#8fd3ff', '#b8f28a', '#ff9ad5'].map((c) => glow(c, 2.4));

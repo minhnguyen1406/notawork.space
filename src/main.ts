@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { sceneColliders, showColliders } from './collide';
+import type { Collider } from '../shared/layout';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -7,7 +9,6 @@ import './style.css';
 import { COLORS, TICK_HZ, type ClientMsg, type PlayerInfo, type ServerMsg } from '../shared/protocol';
 import {
   BOUNDS,
-  COLLIDERS,
   GRID_GROUPS,
   RACE,
   RACE_R,
@@ -65,6 +66,8 @@ const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 900);
 const world = buildWorld();
 const kitchen = new KitchenView(world.scene);
 const games = new Games(world.scene);
+// Everything solid in the scenery, worked out once before any people are added.
+const solid = sceneColliders(world.scene);
 
 // Bloom: only things brighter than white glow (lanterns, fire, neon, string lights).
 const composer = new EffectComposer(
@@ -76,6 +79,7 @@ composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.7, 1.0));
 composer.addPass(new OutputPass());
 
 function resize() {
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight, false);
   composer.setPixelRatio(renderer.getPixelRatio());
   composer.setSize(innerWidth, innerHeight);
@@ -97,7 +101,7 @@ let speaking = new Set<string>();
 
 const keys = new Set<string>();
 let camYaw = 0;
-let camPitch = 0.5;
+let camPitch = 0.42;
 let camDist = 12;
 let shownDist = 12;
 const camFocus = new THREE.Vector3(0, 1.6, 13);
@@ -303,6 +307,11 @@ async function startMedia(url: string, token: string) {
       refreshMediaButtons();
       renderGrid();
     },
+    lost() {
+      media = null;
+      for (const b of [btnMic, btnCam, btnShare, btnTheater]) b.hidden = true;
+      logLine('Voice and video dropped. Reload the page to get them back.');
+    },
   });
   try {
     await m.connect(url, token);
@@ -334,7 +343,11 @@ let micLatched = false;
 let talkHeld = false;
 let micQueue: Promise<void> = Promise.resolve();
 function applyMic() {
-  if (!media) return;
+  if (!media) {
+    // Voice hasn't connected yet: don't remember a press that did nothing.
+    micLatched = talkHeld = false;
+    return;
+  }
   btnMic.textContent = micLatched ? 'Mic on' : talkHeld ? 'Talking…' : 'Mic off · hold V';
   btnMic.classList.toggle('on', micLatched || talkHeld);
   // Run changes one after another so a quick press and release can't end up out of order.
@@ -357,8 +370,13 @@ btnMic.onclick = () => {
 };
 wireToggle(btnCam, 'Camera on', 'Camera off', () => media!.toggleCamera());
 btnShare.onclick = async () => {
+  if (media!.hasScreen && !media!.sharingMyScreen) {
+    toast('Someone is already sharing. Ask them to stop first.');
+    return;
+  }
   try {
-    await media!.toggleScreen();
+    const on = await media!.toggleScreen();
+    if (on && !media!.sharingSound) toast('Sharing without sound. To share sound, use Chrome or Edge and pick a tab.');
   } catch (err) {
     console.error(err); // usually just the person cancelling the picker
   }
@@ -521,6 +539,8 @@ joinForm.onsubmit = (e) => {
 
 chatInput.addEventListener('keydown', (e) => {
   e.stopPropagation();
+  // Enter that confirms a Vietnamese (or other) input-method composition must not send the message.
+  if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Enter') {
     const text = chatInput.value.trim();
     if (text) send({ t: 'chat', text });
@@ -609,10 +629,16 @@ function interact() {
 }
 
 addEventListener('keydown', (e) => {
+  // macOS never sends keyup for a key released while Cmd is down, so let go of everything.
+  if (e.metaKey) {
+    keys.clear();
+    releaseTalk();
+  }
   if (!me || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target instanceof HTMLInputElement) return;
   switch (e.code) {
     case 'Enter':
+      if (e.target instanceof HTMLButtonElement) return; // let Enter press the focused button
       e.preventDefault();
       chatInput.focus();
       return;
@@ -655,6 +681,17 @@ addEventListener('blur', () => {
   keys.clear();
   releaseTalk();
 });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    keys.clear();
+    releaseTalk();
+  }
+});
+// Keep-alive on a timer, not in the render loop: browsers pause rendering in a hidden tab,
+// and the server drops anyone it hasn't heard from for a minute.
+setInterval(() => {
+  if (me) send({ t: 'ping' });
+}, 20_000);
 
 // Drag to orbit, scroll to zoom.
 let dragging = false;
@@ -719,11 +756,11 @@ function tickRace() {
 }
 
 let lastKick = 0;
-const inside = (c: (typeof COLLIDERS)[number], x: number, z: number) =>
+const inside = (c: Collider, x: number, z: number) =>
   Math.abs(x - c.x) < c.hw + BODY && Math.abs(z - c.z) < c.hd + BODY;
 /** Would moving to (x, z) walk into something? Things you already overlap (the chair you just stood up from) don't count. */
 const blocked = (x: number, z: number, fromX: number, fromZ: number) =>
-  COLLIDERS.some((c) => inside(c, x, z) && !inside(c, fromX, fromZ));
+  solid.some((c) => inside(c, x, z) && !inside(c, fromX, fromZ));
 
 const turnToward = (from: number, to: number, k: number) => {
   const d = ((to - from + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
@@ -793,6 +830,13 @@ if (import.meta.env.DEV) {
     pos: () => (me ? [me.x, me.z] : null),
     ball: () => ({ ...games.ball }),
     id: () => myId,
+    solid: () => solid,
+    showSolid: () => showColliders(world.scene, solid),
+    cam: (yaw: number, pitch: number, dist: number) => {
+      camYaw = yaw;
+      camPitch = pitch;
+      camDist = dist;
+    },
     media: () => media?.debug() ?? null,
     cams: () => Object.fromEntries([...cams].map(([id, el]) => [id, el.videoWidth])),
     speaking: () => [...speaking],

@@ -24,6 +24,8 @@ export interface MediaHooks {
   speaking(ids: Set<string>): void;
   /** Any change that the face grid or buttons might care about. */
   changed(): void;
+  /** The voice connection is gone for good (after LiveKit's own retries). */
+  lost(): void;
 }
 
 const HEAR_RANGE = 12; // beyond this you neither hear nor see someone
@@ -96,7 +98,7 @@ export class Media {
             }
             break;
           case Track.Source.ScreenShareAudio:
-            this.screenAudio = null;
+            if (this.screenAudio && !this.screenAudio.isConnected) this.screenAudio = null;
             break;
         }
         this.hooks.changed();
@@ -109,6 +111,7 @@ export class Media {
         this.quality.delete(p.identity);
         this.hooks.changed();
       })
+      .on(RoomEvent.Disconnected, () => this.hooks.lost())
       .on(RoomEvent.ActiveSpeakersChanged, (speakers) => this.hooks.speaking(new Set(speakers.map((s) => s.identity))));
 
     await r.connect(url, token, { autoSubscribe: false });
@@ -182,6 +185,10 @@ export class Media {
 
   get hasScreen() {
     return this.screenOwner !== null;
+  }
+  /** True if my own share carries sound (only some browsers can capture it). */
+  get sharingSound() {
+    return !!this.room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio);
   }
   get sharingMyScreen() {
     return this.screenOwner === this.myId;

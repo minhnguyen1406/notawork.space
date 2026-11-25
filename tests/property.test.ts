@@ -257,3 +257,12 @@ test('a long random game never breaks the books', () => {
     for (const owner of Object.values(g.owner)) expect(g.order).toContain(owner);
   }
 });
+
+test('a jammed player still misses their turn when it reaches them because someone left', () => {
+  const g = start(3);
+  g.skip.bao = true;
+  phoLeave(g, 'ann'); // Ann held the turn; Bao would be next but is stuck in traffic
+  expect(phoCurrent(g)).toBe('chi');
+  expect(g.skip.bao).toBe(false);
+  expect(g.phase).toBe('roll');
+});

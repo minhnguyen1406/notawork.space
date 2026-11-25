@@ -204,8 +204,12 @@ function showdown(g: PokerGame) {
   // Side pots: each level of commitment is a pot contested by those who put in at least that much.
   const levels = [...new Set(live.map((s) => s.committed))].sort((a, b) => a - b);
   let prev = 0;
+  let paid = 0;
   for (const level of levels) {
-    const pot = g.seats.reduce((sum, s) => sum + Math.max(0, Math.min(s.committed, level) - prev), 0);
+    // The top pot also takes anything a folded player put in above every live player's level.
+    const top = level === levels[levels.length - 1];
+    const pot = top ? potOf(g) - paid : g.seats.reduce((sum, s) => sum + Math.max(0, Math.min(s.committed, level) - prev), 0);
+    paid += pot;
     const eligible = live.filter((s) => s.committed >= level);
     const best = eligible.reduce((b, s) => (compareScores(score.get(s.id)!, b) > 0 ? score.get(s.id)! : b), [-1]);
     const winners = eligible.filter((s) => compareScores(score.get(s.id)!, best) === 0);

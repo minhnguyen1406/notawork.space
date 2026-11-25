@@ -84,6 +84,18 @@ export class Billboard {
     this.drawRing();
   }
 
+  /** A flat copy of the headlines or the prices, for mounting on a wall. Faces +z. */
+  panel(kind: 'news' | 'stocks', w: number, h: number) {
+    const g = new THREE.Group();
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(w + 0.5, h + 0.5, 0.3),
+      new THREE.MeshStandardMaterial({ color: '#17131f', roughness: 0.6 }),
+    );
+    frame.position.z = -0.17;
+    g.add(frame, new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: this[kind].tex })));
+    return g;
+  }
+
   setBoard(board: Board) {
     this.board = board;
     this.shown = -1;
