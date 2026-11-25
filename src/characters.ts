@@ -14,7 +14,7 @@ export interface Character {
   root: THREE.Object3D;
   mixer: THREE.AnimationMixer;
   /** Start (or keep) playing a named animation, blending from whatever was playing. */
-  play(name: string, speed?: number): void;
+  play(name: string, speed?: number, once?: boolean): void;
 }
 
 const loader = new GLTFLoader();
@@ -50,11 +50,14 @@ export async function makeCharacter(kind: string): Promise<Character> {
   return {
     root,
     mixer,
-    play(name, speed = 1) {
+    play(name, speed = 1, once = false) {
       const next = actions.get(name) ?? actions.get('idle');
       if (!next) return;
       next.timeScale = speed;
       if (next === current) return;
+      // "Once" animations (falling over) play through and hold their last pose.
+      next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
+      next.clampWhenFinished = once;
       next.reset().fadeIn(0.18).play();
       current?.fadeOut(0.18);
       current = next;

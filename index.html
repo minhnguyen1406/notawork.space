@@ -31,7 +31,10 @@
 
     <div id="hud" hidden>
       <div id="topbar">
-        <span id="online" class="pill"></span>
+        <span id="who">
+          <button id="online" class="pill" type="button" aria-haspopup="true" aria-expanded="false"></button>
+          <div id="people" hidden></div>
+        </span>
         <button id="btn-mic" type="button">Mic off</button>
         <button id="btn-cam" type="button">Camera off</button>
         <button id="btn-share" type="button">Share screen</button>
@@ -46,6 +49,8 @@
       <div id="prompt" hidden></div>
       <div id="toast" hidden></div>
       <pre id="info" hidden></pre>
+      <div id="duel-ask" hidden></div>
+      <div id="duel" hidden></div>
       <div id="timer" class="pill" hidden></div>
       <div id="help">WASD to move · Shift to run · drag to look · E to use or sit · F to chop · Space to shoot · hold V to talk · M to toggle mic · H for the full guide</div>
     </div>
@@ -128,6 +133,7 @@
             <dl>
               <dt>Football</dt><dd>Walk or run into the ball to dribble it. <kbd>Space</kbd> shoots, harder if you're running. <kbd>E</kbd> at the scoreboard resets the score.</dd>
               <dt>Lap race</dt><dd><kbd>E</kbd> at Gate 1, then run through the gates in order.</dd>
+              <dt>Duel</dt><dd>Stand next to someone and press <kbd>G</kbd>. If they accept, you each pick Pillow, Rubber chicken or Umbrella with <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>. Three hearts each.</dd>
               <dt>Picker wheel</dt><dd><kbd>E</kbd> beside it picks someone in the room at random.</dd>
             </dl>
           </section>

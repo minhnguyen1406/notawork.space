@@ -1,5 +1,6 @@
 import { EMOTES, NPC_ID, workWord } from '../../shared/fun';
 import { Npc } from './npc';
+import { Duels } from './duels';
 import { DurableObject } from 'cloudflare:workers';
 import {
   COLORS,
@@ -81,6 +82,14 @@ export class Room extends DurableObject<Env> {
     sit: (seat) => this.npcSit(seat),
     present: (here) => this.broadcast(here ? { t: 'join', player: this.npc.info } : { t: 'leave', id: NPC_ID }),
   });
+  private duels = new Duels({
+    player: (id) => this.everyone().find((p) => p.id === id),
+    send: (id, msg) => {
+      for (const p of this.players.values()) if (p.id === id) this.send(p.ws, msg);
+    },
+    broadcast: (msg) => this.broadcast(msg),
+  });
+
   /** Claude's chat lines go out a moment apart, so they read as speech rather than a burst. */
   private npcLines: string[] = [];
   private npcSay(text: string) {
@@ -186,6 +195,7 @@ export class Room extends DurableObject<Env> {
     const wasHolding = this.kitchen.held[p.id];
     delete this.kitchen.held[p.id];
     this.broadcast({ t: 'leave', id: p.id });
+    this.duels.left(p.id, Date.now());
     if (wasHolding) this.sendKitchen();
     const seat = p.seat;
     p.seat = null;
@@ -221,6 +231,7 @@ export class Room extends DurableObject<Env> {
     this.ticks++;
     this.tickBall();
     if (this.npc.tick(1 / TICK_HZ)) this.moved = true;
+    this.duels.tick(Date.now());
     if (this.npcLines.length && this.ticks % 8 === 0) {
       this.broadcast({ t: 'chat', id: NPC_ID, name: this.npc.info.name, text: this.npcLines.shift()! });
     }
@@ -275,6 +286,10 @@ export class Room extends DurableObject<Env> {
         }
         break;
       }
+
+      case 'duel':
+        this.duels.handle(publicInfo(me), msg, Date.now());
+        break;
 
       case 'emote':
         if (!EMOTES.includes(msg.k) || me.lastSeen - me.lastEmote < 250) return;
@@ -453,6 +468,7 @@ export class Room extends DurableObject<Env> {
       games: this.games,
       media,
       work: this.work && { ago: Date.now() - this.work.at, by: this.work.by },
+      duels: this.duels.views(Date.now()),
     });
     this.refreshBoard();
     this.broadcast({ t: 'join', player: publicInfo(me) }, ws);

@@ -285,6 +285,34 @@ export class Avatar {
     this.video = { holder, tex, el, ring, face, aspect: 0 };
   }
 
+  private actClip = '';
+  private actUntil = 0;
+  /** Play a one-off animation (a swing, a stagger, falling over) for a moment. */
+  act(clip: string, ms: number) {
+    this.actClip = clip;
+    this.actUntil = performance.now() + ms;
+  }
+
+  /** Turn to face a point, at once. */
+  faceTowards(x: number, z: number) {
+    this.ry = this.try_ = Math.atan2(x - this.x, z - this.z);
+    this.group.rotation.y = this.ry;
+  }
+
+  private heartsSprite: THREE.Sprite | null = null;
+  private heartsShown = -1;
+  /** Hearts over the head during a duel, or null to take them away. */
+  setHearts(n: number | null) {
+    if (n === this.heartsShown) return;
+    this.heartsShown = n ?? -1;
+    if (this.heartsSprite) disposeSprite(this.heartsSprite);
+    this.heartsSprite = null;
+    if (n === null) return;
+    this.heartsSprite = textSprite('♥'.repeat(n) + '♡'.repeat(Math.max(0, 3 - n)), 0.5, { bg: 'rgba(20, 16, 24, 0.85)', fg: '#ff5d7a' });
+    this.heartsSprite.position.y = 3.36;
+    this.group.add(this.heartsSprite);
+  }
+
   /** Mark this person as talking (or not): a speaker icon, a pulsing green ring, and the camera rim. */
   setSpeaking(on: boolean) {
     this.speaking = on;
@@ -358,6 +386,7 @@ export class Avatar {
       const perch = !sitting ? 0 : this.seat!.startsWith('cinema') ? 0.42 : this.seat!.startsWith('lounge') ? 0.62 : 0.74;
       c.root.position.y += (perch - c.root.position.y) * Math.min(1, dt * 12);
       if (sitting) c.play('sit');
+      else if (now < this.actUntil) c.play(this.actClip, 1, this.actClip === 'die');
       else if (dancing) c.play('emote-yes', 1.8);
       else if (this.walking) this.pace > 6.6 ? c.play('sprint', 1.15) : c.play('walk', Math.max(0.7, this.pace / 4.2));
       else if (this.hold.children.length) c.play('holding-both');

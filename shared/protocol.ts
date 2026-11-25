@@ -1,4 +1,5 @@
 // Messages and limits shared by the browser and the game server.
+import type { DuelView } from './duel';
 import type { KitchenState } from './kitchen';
 import type { BallState } from './ball';
 
@@ -51,6 +52,8 @@ export type ClientMsg =
   | { t: 'chat'; text: string }
   /** A reaction over your head, a dance, or a snooze (see shared/fun.ts). */
   | { t: 'emote'; k: string }
+  /** Duels: challenge someone nearby, answer a challenge, choose a move, or give up. */
+  | { t: 'duel'; a: 'challenge' | 'accept' | 'decline' | 'pick' | 'quit'; to?: string; move?: string }
   | { t: 'sit'; seat: string | null }
   | { t: 'use'; station: string }
   | { t: 'act'; station: string }
@@ -71,6 +74,8 @@ export type ServerMsg =
       media: { url: string; token: string } | null;
       /** Who last mentioned work in chat and how many ms ago, or null if nobody has. */
       work: { ago: number; by: string } | null;
+      /** Duels under way when you arrive. */
+      duels: DuelView[];
     }
   | { t: 'denied'; reason: 'full' | 'password' }
   | { t: 'join'; player: PlayerInfo }
@@ -81,6 +86,10 @@ export type ServerMsg =
   | { t: 'kitchen'; state: KitchenState }
   | { t: 'notice'; text: string }
   | { t: 'emote'; id: string; k: string }
+  /** A duel started or moved on (duel), or was cleared away (duel null, with its id). */
+  | { t: 'duel'; duel: DuelView | null; id?: number }
+  /** Someone has challenged you. */
+  | { t: 'duelAsk'; from: string; name: string }
   /** Someone said a work word in chat. */
   | { t: 'work'; by: string; word: string }
   | { t: 'board'; board: Board }

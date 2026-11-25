@@ -1,3 +1,6 @@
+import { DuelUI } from './duel';
+import { DUEL_REACH } from '../shared/duel';
+import { NPC_ID } from '../shared/fun';
 import type { ChessView } from '../shared/tables';
 import * as THREE from 'three';
 import { MAX_KICK, MAX_LIFT } from '../shared/ball';
@@ -163,6 +166,56 @@ function toast(text: string, sticky = false) {
 
 function updateOnline() {
   $('online').textContent = avatars.size === 1 ? 'Just you here' : `${avatars.size} here`;
+  if (!peopleEl.hidden) renderPeople();
+}
+
+// Who is here: hover over (or click) the count to see everyone and what they're up to.
+const peopleEl = $('people');
+const WHERE: Record<string, string> = {
+  lounge: 'by the fire',
+  dining: 'at the dining table',
+  cinema: 'at the cinema',
+  chess: 'at the chess table',
+  cards: 'playing Last Card',
+  poker: 'at the poker table',
+  wolf: 'playing Werewolf',
+  pho: 'playing Phố Lớn',
+};
+function renderPeople() {
+  // You first, then everyone else by name.
+  const list = [...avatars.values()].sort((a, b) => Number(b.info.id === myId) - Number(a.info.id === myId) || a.info.name.localeCompare(b.info.name));
+  peopleEl.replaceChildren(
+    ...list.map((a) => {
+      const row = document.createElement('div');
+      row.className = 'person';
+      const dot = document.createElement('i');
+      dot.style.background = a.info.color;
+      const name = document.createElement('b');
+      name.textContent = a.info.id === myId ? `${a.info.name} (you)` : a.info.name;
+      const doing = document.createElement('span');
+      const group = seatGroup(a.seat);
+      doing.textContent = `${a.speaking ? '🔊 ' : ''}${duelUI.busy(a.info.id) ? 'in a duel' : group ? (WHERE[group] ?? 'sitting down') : 'walking around'}`;
+      row.append(dot, name, doing);
+      return row;
+    }),
+  );
+}
+let peoplePinned = false;
+function showPeople(show: boolean) {
+  peopleEl.hidden = !show;
+  $('online').setAttribute('aria-expanded', String(show));
+  if (show) renderPeople();
+}
+{
+  const who = $('who');
+  who.addEventListener('pointerenter', () => showPeople(true));
+  who.addEventListener('pointerleave', () => !peoplePinned && showPeople(false));
+  // Clicking pins it open (handy on touch screens, where there is no hover).
+  $('online').onclick = () => {
+    peoplePinned = !peoplePinned;
+    showPeople(peoplePinned);
+  };
+  setInterval(() => !peopleEl.hidden && renderPeople(), 1000);
 }
 
 function renderMenu() {
@@ -322,6 +375,8 @@ async function startMedia(url: string, token: string) {
     speaking(ids) {
       speaking = ids;
       for (const [id, a] of avatars) a.setSpeaking(ids.has(id));
+      // Your own Mic button glows while the room can hear you, so you know your voice is getting through.
+      btnMic.classList.toggle('heard', ids.has(myId));
       for (const [id, tile] of gridTileById) tile.classList.toggle('speaking', ids.has(id));
     },
     changed() {
@@ -412,6 +467,7 @@ for (const b of [btnMic, btnCam, btnShare]) b.hidden = true;
 // ---------------------------------------------------------------- network
 
 let lastScoreTotal = 0;
+const duelUI = new DuelUI(world.scene, avatars, () => myId, (m) => send(m));
 
 // Playing chess against the built-in Claude character: its moves are worked out here, in the
 // browser of whoever is sitting opposite, and sent to the server (which checks they are legal).
@@ -445,6 +501,7 @@ function handle(msg: ServerMsg) {
       games.setAll(msg.games);
       lastScoreTotal = msg.games.score[0] + msg.games.score[1];
       if (msg.work) world.setWork(Date.now() - msg.work.ago, msg.work.by);
+      for (const d of msg.duels ?? []) duelUI.update(d);
       renderMenu();
       $('join').hidden = true;
       $('hud').hidden = false;
@@ -511,6 +568,12 @@ function handle(msg: ServerMsg) {
         confetti();
         play('tada');
       }
+      break;
+    case 'duel':
+      duelUI.update(msg.duel, msg.id);
+      break;
+    case 'duelAsk':
+      duelUI.ask(msg.from, msg.name);
       break;
     case 'emote':
       avatars.get(msg.id)?.emote(msg.k);
@@ -685,6 +748,7 @@ function lostRoom() {
   myId = '';
   for (const id of [...avatars.keys()]) removeAvatar(id);
   cams.clear();
+  duelUI.clear();
   tableViews.clear();
   mediaRound++;
   const old = media;
@@ -830,9 +894,20 @@ addEventListener('keydown', (e) => {
         applyMic();
       }
       return;
+    case 'KeyG':
+      if (!e.repeat) challenge();
+      return;
+    case 'KeyY':
+    case 'KeyN':
+      if (duelUI.asking) duelUI.answer(e.code === 'KeyY');
+      return;
     case 'Digit1':
     case 'Digit2':
     case 'Digit3':
+      // In a duel, 1 to 3 choose your move.
+      if (!e.repeat && duelUI.key(+e.code.slice(5))) return;
+      if (!e.repeat) emote(EMOJI[+e.code.slice(5) - 1]);
+      return;
     case 'Digit4':
     case 'Digit5':
     case 'Digit6':
@@ -906,6 +981,26 @@ $('guide-close').onclick = () => toggleGuide(false);
 guideEl.addEventListener('pointerdown', (e) => {
   if (e.target === guideEl) toggleGuide(false); // click outside the card
 });
+
+/** The closest other person within duelling distance who is free to fight. */
+function duelTarget() {
+  if (!me || me.seat || duelUI.mine()) return null;
+  let best: Avatar | null = null;
+  let bestD = DUEL_REACH;
+  for (const a of avatars.values()) {
+    if (a === me || a.seat || a.info.id === NPC_ID || duelUI.busy(a.info.id)) continue;
+    const d = Math.hypot(a.x - me.x, a.z - me.z);
+    if (d < bestD) {
+      bestD = d;
+      best = a;
+    }
+  }
+  return best;
+}
+function challenge() {
+  const t = duelTarget();
+  if (t) send({ t: 'duel', a: 'challenge', to: t.info.id });
+}
 
 function emote(k: string) {
   send({ t: 'emote', k });
@@ -1029,6 +1124,12 @@ function moveMe(dt: number) {
   const r = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
   const moving = f !== 0 || r !== 0;
 
+  if (duelUI.mine()) {
+    // Feet planted while you fight.
+    velX = velZ = 0;
+    me.walking = false;
+    return;
+  }
   if (me.seat) {
     me.walking = false;
     // Trying to walk while seated stands you up.
@@ -1137,6 +1238,7 @@ if (import.meta.env.DEV) {
     ball: () => ({ ...games.ball }),
     id: () => myId,
     dropRoom: () => ws?.close(),
+    duel: () => duelUI.mine(),
     talking: () => [...avatars].filter(([, a]) => a.speaking).map(([id]) => id),
     looks: () => Object.fromEntries([...avatars].map(([id, a]) => [id, a.info.look])),
     table: (id: string) => tableViews.get(id) ?? null,
@@ -1215,6 +1317,7 @@ function frame(nowMs: number) {
   moveMe(dt);
   tickRace();
   for (const a of avatars.values()) a.update(dt, camera);
+  duelUI.frame();
 
   if (me) {
     camFocus.lerp(new THREE.Vector3(me.x, 1.6, me.z), 1 - Math.exp(-12 * dt));
@@ -1258,7 +1361,8 @@ function frame(nowMs: number) {
       menuEl.hidden = me.x < 10 || me.z < -6 || me.z > 12 || !!me.seat;
 
       const t = me.seat ? null : nearest();
-      const text = me.seat ? (myGridGroup() ? '' : 'E — stand up') : t ? promptFor(t) : '';
+      const rival = !t && !me.seat ? duelTarget() : null;
+      const text = me.seat ? (myGridGroup() ? '' : 'E — stand up') : t ? promptFor(t) : rival ? `G — challenge ${rival.info.name} to a duel` : '';
       promptEl.textContent = text;
       promptEl.hidden = !text || !theaterEl.hidden;
     }
