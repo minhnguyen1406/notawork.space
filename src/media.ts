@@ -33,6 +33,17 @@ const HEAR_RANGE = 12; // beyond this you neither hear nor see someone
 const FULL_VOLUME_RANGE = 3;
 const MAX_VIDEOS = 8;
 
+/** A tiny corner of the page, behind the 3D canvas, where scene-only videos live. */
+function parking() {
+  let el = document.getElementById('video-parking');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'video-parking';
+    document.body.prepend(el);
+  }
+  return el;
+}
+
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 /**
@@ -69,11 +80,11 @@ export class Media {
             this.voices.set(p.identity, el as HTMLAudioElement);
             break;
           case Track.Source.Camera:
-            if (!pub.isMuted) this.hooks.camera(p.identity, el as HTMLVideoElement);
+            if (!pub.isMuted) this.hooks.camera(p.identity, this.park(el as HTMLVideoElement));
             break;
           case Track.Source.ScreenShare:
             this.screenOwner = p.identity;
-            this.hooks.screen(el as HTMLVideoElement);
+            this.hooks.screen(this.park(el as HTMLVideoElement));
             break;
           case Track.Source.ScreenShareAudio:
             (el as HTMLAudioElement).volume = this.screenVolume;
@@ -131,18 +142,19 @@ export class Media {
       pub.track?.detach().forEach((el) => el.remove());
       this.hooks.camera(p.identity, null);
     } else if (pub.track) {
-      this.hooks.camera(p.identity, pub.track.attach() as HTMLVideoElement);
+      this.hooks.camera(p.identity, this.park(pub.track.attach() as HTMLVideoElement));
     }
     this.hooks.changed();
   }
 
   private onLocal(pub: TrackPublication, published: boolean) {
+    if (!published) pub.track?.detach().forEach((el) => el.remove());
     if (pub.source === Track.Source.Camera) {
-      this.hooks.camera(this.myId, published && pub.track ? (pub.track.attach() as HTMLVideoElement) : null);
+      this.hooks.camera(this.myId, published && pub.track ? this.park(pub.track.attach() as HTMLVideoElement) : null);
     } else if (pub.source === Track.Source.ScreenShare) {
       if (published && pub.track) {
         this.screenOwner = this.myId;
-        this.hooks.screen(pub.track.attach() as HTMLVideoElement);
+        this.hooks.screen(this.park(pub.track.attach() as HTMLVideoElement));
       } else if (this.screenOwner === this.myId) {
         this.screenOwner = null;
         this.hooks.screen(null);
@@ -156,6 +168,18 @@ export class Media {
   }
 
   private extra = new Map<HTMLMediaElement, Track>();
+
+  /**
+   * Videos that are only ever drawn inside the 3D scene still have to sit on the page and be
+   * playing, or browsers stop decoding them and the picture freezes on its first frame.
+   */
+  private park<T extends HTMLMediaElement>(el: T): T {
+    el.muted = true;
+    (el as unknown as HTMLVideoElement).playsInline = true;
+    parking().append(el);
+    void el.play().catch(() => {});
+    return el;
+  }
 
   private extraElement(track: Track | undefined): HTMLVideoElement | null {
     if (!track) return null;

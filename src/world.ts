@@ -23,6 +23,8 @@ export interface World {
   scene: THREE.Scene;
   /** Put a live video on the cinema screen, or pass null to go back to the idle card. */
   setScreenVideo(el: HTMLVideoElement | null): void;
+  /** How many shared-video frames have been copied onto the cinema screen (for the tests). */
+  screenFrames(): number;
   setBoard(board: Board): void;
   /** When work was last mentioned in chat (this computer's clock), or null if never. */
   setWork(at: number | null, by: string): void;
@@ -366,6 +368,7 @@ export function buildWorld(): World {
   let screenTex: THREE.VideoTexture | null = null;
   let screenEl: HTMLVideoElement | null = null;
   let screenAspect = 0;
+  let screenTime = -1;
 
   for (const seat of SEATS.filter((s) => s.group === 'cinema')) {
     const bag = new THREE.Mesh(new THREE.SphereGeometry(0.75, 8, 6), mat(seat.id.endsWith('0') ? '#c96a4a' : '#d98b5f'));
@@ -494,11 +497,13 @@ export function buildWorld(): World {
     scene,
     setBoard: (board) => billboard.setBoard(board),
     setWork: (at, by) => workSign.set(at, by),
+    screenFrames: () => screenTex?.version ?? 0,
     setScreenVideo(el) {
       screenTex?.dispose();
       screenTex = null;
       screenEl = el;
       screenAspect = 0;
+      screenTime = -1;
       if (el) {
         screenTex = new THREE.VideoTexture(el);
         screenTex.colorSpace = THREE.SRGBColorSpace;
@@ -520,6 +525,12 @@ export function buildWorld(): World {
           if (a >= fit) screen.scale.set(SCREEN.w, SCREEN.w / a, 1);
           else screen.scale.set(SCREEN.h * a, SCREEN.h, 1);
         }
+      }
+      // Copy each new video frame to the screen ourselves. The 3D library waits for the browser to
+      // announce frames, which it stops doing for a video that isn't shown on the page itself.
+      if (screenTex && screenEl && screenEl.readyState >= 2 && screenEl.currentTime !== screenTime) {
+        screenTime = screenEl.currentTime;
+        screenTex.needsUpdate = true;
       }
       billboard.update(time);
       workSign.update();

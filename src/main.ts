@@ -274,6 +274,8 @@ function openTheater() {
   theaterVideo = el;
   theaterEl.prepend(el);
   theaterEl.hidden = false;
+  // It was created off the page, where some browsers refuse to start it; start it now that it is shown.
+  void el.play().catch(() => {});
 }
 
 btnTheater.onclick = openTheater;
@@ -912,6 +914,8 @@ if (import.meta.env.DEV) {
     },
     media: () => media?.debug() ?? null,
     cams: () => Object.fromEntries([...cams].map(([id, el]) => [id, el.videoWidth])),
+    drawn: () => ({ screen: world.screenFrames(), cams: Object.fromEntries([...avatars].map(([id, a]) => [id, a.videoFrames])) }),
+    camState: () => [...cams].map(([id, el]) => ({ id, paused: el.paused, t: el.currentTime, onPage: el.isConnected })),
     speaking: () => [...speaking],
   };
 }

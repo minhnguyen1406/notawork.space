@@ -1008,3 +1008,20 @@ kbd {
   border-bottom-width: 2px;
   border-radius: 6px;
 }
+
+/* Videos drawn only inside the 3D scene. They must be on the page and "visible" to keep playing,
+   so they sit in a few pixels behind the canvas rather than being hidden. */
+#video-parking {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 4px;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+}
+#video-parking video {
+  width: 4px;
+  height: 4px;
+}

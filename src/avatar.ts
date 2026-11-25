@@ -159,6 +159,11 @@ export class Avatar {
     this.ry = this.try_ = ry;
   }
 
+  private videoTime = -1;
+  /** How many camera frames have been copied into the 3D bubble (for the tests). */
+  get videoFrames() {
+    return this.video?.tex.version ?? 0;
+  }
   private floats: { sprite: THREE.Sprite; born: number; life: number }[] = [];
   private danceUntil = 0;
 
@@ -281,6 +286,11 @@ export class Avatar {
       this.video.holder.quaternion.copy(this.group.quaternion).invert().multiply(camera.quaternion);
       // Crop the picture to a centred square so it fills the circle.
       const { el, tex } = this.video;
+      // Copy each new camera frame ourselves; see the note on the cinema screen in world.ts.
+      if (el.readyState >= 2 && el.currentTime !== this.videoTime) {
+        this.videoTime = el.currentTime;
+        tex.needsUpdate = true;
+      }
       const aspect = el.videoWidth && el.videoHeight ? el.videoWidth / el.videoHeight : 0;
       if (aspect && aspect !== this.video.aspect) {
         this.video.aspect = aspect;
