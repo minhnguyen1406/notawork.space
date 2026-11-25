@@ -1,0 +1,45 @@
+const URL = process.env.WS_URL ?? 'ws://localhost:5173/ws';
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const check = (label, ok) => { console.log((ok ? 'PASS ' : 'FAIL ') + label); if (!ok) process.exitCode = 1; };
+const ws = new WebSocket(URL); const msgs = []; let ball = null, welcome = null;
+ws.onmessage = (e) => { const m = JSON.parse(e.data); msgs.push(m); if (m.t === 'welcome') { welcome = m; ball = m.games.ball; } if (m.t === 'ball') ball = m.ball; };
+await new Promise((r) => (ws.onopen = r));
+const send = (m) => ws.send(JSON.stringify(m));
+send({ t: 'join', name: 'Tester', color: '#3a86ff' }); await wait(400);
+check('welcome carries games state', welcome?.games?.score?.length === 2 && Array.isArray(welcome.games.laps));
+check('ball starts at centre', ball.x === -12 && ball.z === 32.5);
+send({ t: 'spot', id: 'score' }); await wait(200);
+check('far-away spot ignored', !msgs.some((m) => m.t === 'notice' && m.text.includes('reset')));
+send({ t: 'kick', vx: -16, vz: 0 }); await wait(200);
+check('far-away kick ignored', ball.vx === 0);
+// walk to the ball and kick it west until it goes in
+let scored = false;
+for (let i = 0; i < 8 && !scored; i++) {
+  send({ t: 'move', x: ball.x + 1, z: ball.z, ry: 0 }); await wait(200);
+  send({ t: 'kick', vx: -99, vz: 0 }); await wait(1800);
+  scored = msgs.some((m) => m.t === 'score');
+}
+const score = msgs.findLast((m) => m.t === 'score')?.score;
+check('goal in the west end counts for Blue', scored && score[0] === 0 && score[1] === 1);
+check('goal notice names the scorer', msgs.some((m) => m.t === 'notice' && m.text === 'Tester scored! Red 0 – 1 Blue'));
+check('ball back at centre after goal', ball.x === -12 && ball.z === 32.5 && ball.vx === 0);
+check('kick speed was capped', !msgs.some((m) => m.t === 'ball' && Math.abs(m.ball.vx) > 16.01));
+send({ t: 'move', x: -12, z: 22.2, ry: 0 }); await wait(200);
+send({ t: 'spot', id: 'score' }); await wait(200);
+check('score reset', msgs.findLast((m) => m.t === 'score').score.join() === '0,0');
+send({ t: 'lap', ms: 1200 }); await wait(150);
+check('impossibly fast lap refused', !msgs.some((m) => m.t === 'laps'));
+send({ t: 'lap', ms: 15320 }); await wait(150); send({ t: 'lap', ms: 17000 }); await wait(150);
+const laps = msgs.findLast((m) => m.t === 'laps')?.laps;
+check('best lap kept per person', laps?.length === 1 && laps[0].ms === 15320);
+check('record notice', msgs.some((m) => m.t === 'notice' && m.text === 'Tester ran a lap in 15.32s — a new record!'));
+send({ t: 'move', x: -30, z: 0, ry: 0 }); await wait(200);
+send({ t: 'spot', id: 'wheel' }); await wait(200); send({ t: 'spot', id: 'wheel' }); await wait(200);
+const spins = msgs.filter((m) => m.t === 'wheel');
+check('wheel spins once (second press ignored while spinning)', spins.length === 1 && spins[0].names[spins[0].winner] === 'Tester');
+await wait(4600);
+check('wheel result announced after the spin', msgs.some((m) => m.t === 'notice' && m.text === 'The wheel picked Tester!'));
+send({ t: 'move', x: -43.9, z: 43.9, ry: 0 }); send({ t: 'move', x: -999, z: 999, ry: 0 }); await wait(300);
+const me = msgs.findLast((m) => m.t === 'state').players.find((p) => p[0] === welcome.id);
+check('position clamped to the new roof', me[1] === -44 && me[2] === 44);
+ws.close();

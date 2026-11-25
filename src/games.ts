@@ -3,6 +3,8 @@ import {
   CARDS_TABLE,
   CHESS_TABLE,
   POKER_TABLE,
+  PHO_TABLE,
+  WOLF_RING,
   FLOODLIGHTS,
   GAMES_LOUNGE,
   GOAL_HALF,
@@ -68,6 +70,7 @@ export class Games {
     this.buildRace();
     this.wheel = this.buildWheel();
     this.buildLounge();
+    this.buildCorner();
 
     this.ballMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(BALL_R, 1), mat('#f4f1ea'));
     this.ballMesh.castShadow = true;
@@ -376,9 +379,69 @@ export class Games {
       scene.add(chair);
     }
 
-    const soon = textSprite('More tables coming: Werewolf and a property game', 0.4);
-    soon.position.set(L.x2 - 2.4, 2.4, CHESS_TABLE.z);
-    scene.add(soon);
+  }
+
+  // ------------------------------------------------------------ south-west corner: Werewolf and Phố Lớn
+
+  private buildCorner() {
+    const { scene } = this;
+    const flat = (geo: THREE.BufferGeometry, color: string, x: number, z: number) => {
+      const m = new THREE.Mesh(geo, mat(color));
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, 0.012, z);
+      m.receiveShadow = true;
+      scene.add(m);
+    };
+
+    // Werewolf: log seats round a campfire.
+    const W = WOLF_RING;
+    flat(new THREE.CircleGeometry(W.r + 1.3, 28), '#3b3148', W.x, W.z);
+    const stones = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 0.35, 9), mat('#6a6470'));
+    stones.position.set(W.x, 0.18, W.z);
+    stones.castShadow = true;
+    scene.add(stones);
+    for (let i = 0; i < 3; i++) {
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.22 + i * 0.07, 0.8 + i * 0.25, 5), glow(['#ffd76a', '#ffa23a', '#ff7a2a'][i], 2.6));
+      flame.position.set(W.x + (i - 1) * 0.22, 0.75, W.z + (i % 2) * 0.18);
+      scene.add(flame);
+    }
+    const fire = new THREE.PointLight('#ff9a4a', 70, 18, 1.8);
+    fire.position.set(W.x, 1.5, W.z);
+    scene.add(fire);
+    for (const seat of SEATS.filter((s) => s.group === 'wolf')) {
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.4, 0.5, 8), mat('#7a5236'));
+      log.position.set(seat.x, 0.25, seat.z);
+      log.castShadow = true;
+      scene.add(log);
+    }
+    const wolfLabel = textSprite('Werewolf · 5 to 12 players', 0.45);
+    wolfLabel.position.set(W.x, 3.4, W.z);
+    scene.add(wolfLabel);
+
+    // Phố Lớn: a long table with the board on it.
+    const T = PHO_TABLE;
+    flat(new THREE.PlaneGeometry(7, 5.6), '#3d2f52', T.x, T.z);
+    scene.add(box(4, 0.12, 1.5, '#7a5236', T.x, 0.9, T.z));
+    for (const dx of [-1.7, 1.7]) scene.add(box(0.18, 0.86, 1.2, '#5e3e29', T.x + dx, 0.43, T.z));
+    scene.add(box(1.2, 0.03, 1.2, '#f3ead8', T.x, 0.975, T.z));
+    scene.add(box(0.8, 0.035, 0.8, '#ffd76a', T.x, 0.98, T.z));
+    for (const seat of SEATS.filter((s) => s.group === 'pho')) {
+      const chair = new THREE.Group();
+      chair.add(box(0.7, 0.12, 0.7, '#c9a26b', 0, 0.5, 0), box(0.7, 0.7, 0.1, '#c9a26b', 0, 0.85, -0.33));
+      for (const dx of [-0.28, 0.28]) for (const dz of [-0.28, 0.28]) chair.add(box(0.08, 0.5, 0.08, '#8a6a44', dx, 0.25, dz));
+      chair.position.set(seat.x, 0, seat.z);
+      chair.rotation.y = seat.ry;
+      scene.add(chair);
+    }
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), glow('#ffe2a8', 2.4));
+    lamp.position.set(T.x, 3.2, T.z);
+    scene.add(lamp, box(0.12, 3.2, 0.12, '#3a2f3c', T.x + 2.6, 1.6, T.z), box(2.7, 0.1, 0.1, '#3a2f3c', T.x + 1.3, 3.2, T.z));
+    const phoLight = new THREE.PointLight('#ffd9a0', 45, 14, 1.8);
+    phoLight.position.set(T.x, 3, T.z);
+    scene.add(phoLight);
+    const phoLabel = textSprite('Phố Lớn · property game', 0.45);
+    phoLabel.position.set(T.x, 4.1, T.z);
+    scene.add(phoLabel);
   }
 
   // ------------------------------------------------------------ shared

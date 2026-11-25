@@ -690,3 +690,214 @@ button.card.back:disabled {
 .poker-amount {
   width: 110px;
 }
+
+/* Werewolf */
+.wolf-role {
+  margin: 4px 0;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  display: inline-block;
+}
+.wolf-role.werewolf {
+  background: #7d2c38;
+}
+.wolf-role.seer {
+  background: #4a3f8f;
+}
+.wolf-role.doctor {
+  background: #2f7d55;
+}
+.wolf-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  max-width: 720px;
+}
+.wolf-player {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-radius: 12px;
+  padding: 10px 14px;
+  backdrop-filter: none;
+  background: rgba(0, 0, 0, 0.35);
+}
+.wolf-player:disabled {
+  cursor: default;
+}
+.wolf-player:not(:disabled):hover {
+  border-color: var(--accent-2);
+}
+.wolf-player.out {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.wolf-name {
+  font-weight: 700;
+}
+.wolf-tag {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.wolf-tag.werewolf {
+  background: #b5474b;
+}
+.wolf-notes,
+.game-log {
+  width: min(100%, 620px);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.game-log div:last-child {
+  color: var(--accent-2);
+}
+
+/* Phố Lớn */
+.pho-wrap {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.pho-board {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(7, 1fr);
+  gap: 3px;
+  width: min(100%, 68vh, 640px);
+  aspect-ratio: 1;
+  flex-shrink: 0;
+}
+.pho-space {
+  position: relative;
+  background: #f3ead8;
+  color: #1d1820;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1.15;
+  text-align: center;
+  min-width: 0;
+}
+.pho-space.start,
+.pho-space.rest,
+.pho-space.jam,
+.pho-space.festival {
+  background: #ffd76a;
+  justify-content: center;
+}
+.pho-space.lucky,
+.pho-space.toll,
+.pho-space.tax {
+  background: #d9cdb8;
+  justify-content: center;
+}
+.pho-band {
+  width: 100%;
+  height: 22%;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #1d1820;
+  line-height: 1.4;
+}
+.pho-name {
+  font-weight: 700;
+  padding: 1px 2px;
+}
+.pho-price {
+  opacity: 0.7;
+}
+.pho-tokens {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 1px;
+}
+.pho-token {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  border: 1.5px solid #1d1820;
+  flex-shrink: 0;
+}
+.pho-mid {
+  grid-row: 2 / 7;
+  grid-column: 2 / 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+.pho-mid .game-log {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.pho-die {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: #fbf7ee;
+  color: #1d1820;
+  font-size: 26px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+.pho-side {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 170px;
+}
+.pho-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+.pho-player.turn {
+  border-color: var(--accent-2);
+}
+.pho-pname {
+  flex: 1;
+}
+.pho-cash {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

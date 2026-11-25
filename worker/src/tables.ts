@@ -9,7 +9,9 @@ import {
   topCard,
   type CardsGame,
 } from '../../shared/cards';
-import type { CardsView, ChessView, PokerView } from '../../shared/tables';
+import type { CardsView, ChessView, PhoView, PokerView, WolfView } from '../../shared/tables';
+import { FORCE_AFTER_MS, newWolf, wolfForce, wolfLeave, wolfNight, wolfStart, wolfVote } from '../../shared/werewolf';
+import { newPho, phoBuild, phoBuy, phoEnd, phoFinish, phoLeave, phoRoll, phoStart } from '../../shared/property';
 import {
   betting,
   newPoker,
@@ -43,6 +45,8 @@ export class Tables {
   private chessLast: { from: string; to: string } | null = null;
   private cards: CardsGame | null = null;
   private poker = newPoker();
+  private wolf = newWolf();
+  private pho = newPho();
 
   constructor(private io: TableIO) {}
 
@@ -55,6 +59,8 @@ export class Tables {
     if (group === 'chess') for (const s of this.at('chess')) this.io.send(s.id, 'chess', this.chessView(s));
     if (group === 'cards') for (const s of this.at('cards')) this.io.send(s.id, 'cards', this.cardsView(s));
     if (group === 'poker') for (const s of this.at('poker')) this.io.send(s.id, 'poker', this.pokerView(s));
+    if (group === 'wolf') for (const s of this.at('wolf')) this.io.send(s.id, 'wolf', this.wolfView(s));
+    if (group === 'pho') for (const s of this.at('pho')) this.io.send(s.id, 'pho', this.phoView(s));
   }
 
   /** Call after someone sits, stands, or disconnects (with their seat already updated or cleared). */
@@ -63,6 +69,8 @@ export class Tables {
     const now = seatGroup(p.seat);
     if (was === 'cards' && now !== 'cards') this.leaveCards(p.id);
     if (was === 'poker' && now !== 'poker') pokerLeave(this.poker, p.id);
+    if (was === 'wolf' && now !== 'wolf') this.announceWolf(() => wolfLeave(this.wolf, p.id, Date.now()));
+    if (was === 'pho' && now !== 'pho') this.announcePho(() => phoLeave(this.pho, p.id));
     this.refresh(was);
     if (now !== was) this.refresh(now);
   }
@@ -73,6 +81,8 @@ export class Tables {
     if (table === 'chess') this.chessAction(p, act);
     else if (table === 'cards') this.cardsAction(p, act);
     else if (table === 'poker') this.pokerAction(p, act);
+    else if (table === 'wolf') this.wolfAction(p, act);
+    else if (table === 'pho') this.phoAction(p, act);
   }
 
   // ------------------------------------------------------------ chess
@@ -210,5 +220,97 @@ export class Tables {
       return;
     }
     this.refresh('poker');
+  }
+
+  // ------------------------------------------------------------ Werewolf
+
+  /** Run a change and tell the whole room if it ended the game. */
+  private announceWolf(change: () => void) {
+    const before = this.wolf.winner;
+    change();
+    if (!before && this.wolf.winner) {
+      this.io.notice(this.wolf.winner === 'village' ? 'Werewolf: the village won' : 'Werewolf: the werewolves won');
+    }
+  }
+
+  private wolfView(s: Sitter): WolfView {
+    const g = this.wolf;
+    const me = g.players.find((p) => p.id === s.id);
+    const name = (id: string) => (id === 'skip' ? 'nobody' : (g.players.find((p) => p.id === id)?.name ?? '?'));
+    const over = g.phase === 'over';
+    const iAmWolf = me?.role === 'werewolf';
+    // You may know a role if it is yours, the person is out, the game is over, you are out
+    // yourself (you watch as a ghost), or you are both werewolves.
+    const knows = (p: { id: string; alive: boolean; role: string }) =>
+      p.id === s.id || !p.alive || over || (me && !me.alive) || (iAmWolf && p.role === 'werewolf');
+
+    let can: WolfView['night']['can'] = null;
+    let done = false;
+    if (g.phase === 'night' && me?.alive) {
+      if (me.role === 'werewolf') (can = 'kill'), (done = !!g.kills[me.id]);
+      else if (me.role === 'seer') (can = 'look'), (done = g.inspected);
+      else if (me.role === 'doctor') (can = 'protect'), (done = g.protect !== null);
+    }
+    return {
+      phase: g.phase,
+      round: g.round,
+      players: g.players.map((p) => ({ id: p.id, name: p.name, alive: p.alive, role: knows(p) ? p.role : null })),
+      you: s.id,
+      yourRole: me?.role ?? null,
+      alive: !!me?.alive,
+      night: {
+        can,
+        done,
+        // Only werewolves see which victims the pack has picked.
+        picks: iAmWolf && g.phase === 'night' ? Object.entries(g.kills).map(([by, t]) => ({ by: name(by), target: name(t) })) : [],
+      },
+      notes: me?.role === 'seer' ? g.notes : [],
+      votes: g.phase === 'day' ? Object.entries(g.votes).map(([by, t]) => ({ by: name(by), target: name(t) })) : [],
+      myVote: g.votes[s.id] ?? null,
+      log: g.log.slice(-8),
+      winner: g.winner,
+      seated: this.at('wolf').length,
+      forceIn: g.phase === 'night' || g.phase === 'day' ? Math.max(0, g.since + FORCE_AFTER_MS - Date.now()) : 0,
+    };
+  }
+
+  private wolfAction(p: Sitter, a: Record<string, unknown>) {
+    const g = this.wolf;
+    const now = Date.now();
+    let ok = false;
+    this.announceWolf(() => {
+      if (a.k === 'start') ok = wolfStart(g, this.at('wolf').map((x) => ({ id: x.id, name: x.name })), now);
+      else if (a.k === 'night' && typeof a.target === 'string') ok = wolfNight(g, p.id, a.target, now);
+      else if (a.k === 'vote' && typeof a.target === 'string') ok = wolfVote(g, p.id, a.target, now);
+      else if (a.k === 'force') ok = wolfForce(g, p.id, now);
+    });
+    if (ok) this.refresh('wolf');
+  }
+
+  // ------------------------------------------------------------ Phố Lớn
+
+  private announcePho(change: () => void) {
+    const before = this.pho.winner;
+    change();
+    if (!before && this.pho.winner) this.io.notice(`${this.pho.names[this.pho.winner]} won at Phố Lớn`);
+  }
+
+  private phoView(s: Sitter): PhoView {
+    const g = this.pho;
+    return { ...g, log: g.log.slice(-8), winner: g.winner ? g.names[g.winner] : null, you: s.id, seated: this.at('pho').length };
+  }
+
+  private phoAction(p: Sitter, a: Record<string, unknown>) {
+    const g = this.pho;
+    let ok = false;
+    this.announcePho(() => {
+      if (a.k === 'start') ok = phoStart(g, this.at('pho').map((x) => ({ id: x.id, name: x.name })));
+      else if (a.k === 'roll') ok = phoRoll(g, p.id);
+      else if (a.k === 'buy') ok = phoBuy(g, p.id, a.yes === true);
+      else if (a.k === 'build' && typeof a.space === 'number') ok = phoBuild(g, p.id, a.space);
+      else if (a.k === 'end') ok = phoEnd(g, p.id);
+      else if (a.k === 'finish') ok = phoFinish(g, p.id);
+    });
+    if (ok) this.refresh('pho');
   }
 }

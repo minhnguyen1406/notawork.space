@@ -96,13 +96,16 @@ export interface Seat {
 }
 
 /** Sitting in one of these groups opens the face grid with everyone else seated there. */
-export const GRID_GROUPS = ['lounge', 'dining', 'chess', 'cards', 'poker'];
+export const GRID_GROUPS = ['lounge', 'dining', 'chess', 'cards', 'poker', 'wolf', 'pho'];
 
 /** The games lounge (south-east), with its sit-down game tables. */
 export const GAMES_LOUNGE = { x1: 8.6, x2: 19.4, z1: 21.6, z2: 42.6, h: 4.5 };
 export const CHESS_TABLE = { x: 12, z: 26 };
 export const CARDS_TABLE = { x: 14.5, z: 32.4, r: 1.5 };
 export const POKER_TABLE = { x: 14.5, z: 38.8, r: 1.5 };
+/** The south-west corner: a campfire ring for Werewolf and a long table for the property game. */
+export const WOLF_RING = { x: -38, z: 37.6, r: 3.2 };
+export const PHO_TABLE = { x: -38, z: 27 };
 
 export const SEATS: Seat[] = [];
 
@@ -149,6 +152,24 @@ for (const [group, table] of [['cards', CARDS_TABLE], ['poker', POKER_TABLE]] as
   }
 }
 
+// Werewolf: twelve log seats around a campfire.
+for (let i = 0; i < 12; i++) {
+  const a = (i / 12) * Math.PI * 2;
+  SEATS.push({
+    id: `wolf:${i}`,
+    group: 'wolf',
+    x: WOLF_RING.x + Math.sin(a) * WOLF_RING.r,
+    z: WOLF_RING.z + Math.cos(a) * WOLF_RING.r,
+    ry: a + Math.PI,
+  });
+}
+// Property game: three chairs down each long side of the table.
+for (let i = 0; i < 3; i++) {
+  const x = PHO_TABLE.x - 1.5 + i * 1.5;
+  SEATS.push({ id: `pho:n${i}`, group: 'pho', x, z: PHO_TABLE.z - 1.6, ry: 0 });
+  SEATS.push({ id: `pho:s${i}`, group: 'pho', x, z: PHO_TABLE.z + 1.6, ry: Math.PI });
+}
+
 /** A short description of a seat for the "press E" prompt. */
 export const seatLabel = (id: string) =>
   id === 'chess:0'
@@ -161,7 +182,11 @@ export const seatLabel = (id: string) =>
           ? 'sit down at the card table'
           : id.startsWith('poker')
             ? 'sit down at the poker table'
-            : 'sit down';
+            : id.startsWith('wolf')
+              ? 'sit by the fire to play Werewolf'
+              : id.startsWith('pho')
+                ? 'sit down to play Phố Lớn'
+                : 'sit down';
 
 export const seatGroup = (seatId: string | null) => (seatId ? seatId.split(':')[0] : null);
 
@@ -189,9 +214,8 @@ export const PLANTS: { x: number; z: number; scale: number }[] = [
   { x: -32, z: 17.5, scale: 1.1 },
   { x: 18.3, z: 28.5, scale: 1.2 },
   { x: 9.8, z: 30, scale: 1.2 },
-  { x: -37, z: 26, scale: 1.2 },
-  { x: -40, z: 34, scale: 1 },
-  { x: -36, z: 41, scale: 1.2 },
+  { x: -42.6, z: 21.6, scale: 1.2 },
+  { x: -33, z: 32.4, scale: 1.1 },
 ];
 
 /** Tall corner masts that hold up the billboard cables and string lights. */
@@ -225,6 +249,8 @@ export const COLLIDERS: Collider[] = [
   square(CHESS_TABLE.x, CHESS_TABLE.z, 0.75),
   square(CARDS_TABLE.x, CARDS_TABLE.z, CARDS_TABLE.r * 0.8),
   square(POKER_TABLE.x, POKER_TABLE.z, POKER_TABLE.r * 0.8),
+  square(WOLF_RING.x, WOLF_RING.z, 0.8),
+  { x: PHO_TABLE.x, z: PHO_TABLE.z, hw: 2.1, hd: 0.8 },
   ...PLANTS.map((p) => square(p.x, p.z, 0.42 * p.scale)),
   ...MASTS.map((m) => square(m.x, m.z, 0.3)),
   ...PERGOLA_POSTS.map((p) => square(p.x, p.z, 0.2)),

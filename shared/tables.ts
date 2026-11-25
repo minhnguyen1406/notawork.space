@@ -1,8 +1,10 @@
 // What the server tells each person sitting at a game table. Views are per person,
 // so hidden things (your hand) are only ever sent to you.
 import type { Card, Suit } from './cards';
+import type { Role } from './werewolf';
+import type { PhoGame } from './property';
 
-export const TABLE_GROUPS = ['chess', 'cards', 'poker'] as const;
+export const TABLE_GROUPS = ['chess', 'cards', 'poker', 'wolf', 'pho'] as const;
 export type TableId = (typeof TABLE_GROUPS)[number];
 export const isTable = (g: string | null): g is TableId => (TABLE_GROUPS as readonly string[]).includes(g ?? '');
 
@@ -60,3 +62,30 @@ export interface PokerView {
   seated: number;
   you: string;
 }
+
+export interface WolfView {
+  phase: 'lobby' | 'night' | 'day' | 'over';
+  round: number;
+  /** A role is only filled in when you are allowed to know it. */
+  players: { id: string; name: string; alive: boolean; role: Role | null }[];
+  you: string;
+  /** Your own role, or null if you are not in this game. */
+  yourRole: Role | null;
+  alive: boolean;
+  /** What you may do tonight, and whether you have done it. */
+  night: { can: 'kill' | 'look' | 'protect' | null; done: boolean; picks: { by: string; target: string }[] };
+  /** What the seer has learned. Empty for everyone else. */
+  notes: string[];
+  votes: { by: string; target: string }[];
+  myVote: string | null;
+  log: string[];
+  winner: 'village' | 'werewolves' | null;
+  seated: number;
+  /** Milliseconds until anyone may move a stalled night or day on. */
+  forceIn: number;
+}
+
+export type WolfAction = { k: 'start' } | { k: 'night'; target: string } | { k: 'vote'; target: string } | { k: 'force' };
+
+/** Nothing is hidden in the property game, so everyone gets the whole state. */
+export type PhoView = Omit<PhoGame, 'winner'> & { winner: string | null; you: string; seated: number };

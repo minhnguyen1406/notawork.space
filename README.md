@@ -15,6 +15,9 @@ together on the big screen, and cook in the kitchen with nobody timing you.
 - **Games lounge:** sit at a table to play chess (with seats for watchers), Last Card (a traditional
   Crazy Eights-style card game for two to eight) or Texas Hold'em with play chips. The server deals,
   so nobody can see your hand.
+- **Werewolf:** five to twelve players round a campfire. The server is the moderator; your role and
+  your night choice only appear on your own screen.
+- **Phố Lớn:** an original property-trading board game around Vietnam, for two to six.
 
 ## How it fits together
 
@@ -38,6 +41,13 @@ Open http://localhost:5173. Open a second tab to see two players.
 
 Voice and video are off until LiveKit keys are set. Copy `worker/.dev.vars.example` to
 `worker/.dev.vars` and fill it in. That file is git-ignored; never commit keys.
+
+## Tests
+
+```sh
+npm test              # rule tests for poker, Werewolf and Phố Lớn
+npm run test:server   # behaviour tests against a running `npm run dev`
+```
 
 ## Deploy
 
