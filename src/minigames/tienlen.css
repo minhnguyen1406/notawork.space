@@ -84,3 +84,32 @@
 .mg-tienlen .mg-tienlen-why {
   min-height: 1.4em;
 }
+.mg-tienlen .mg-tienlen-why.warn {
+  color: #ff8a70;
+  font-weight: 700;
+}
+.mg-tienlen .mg-tienlen-version {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+  margin: 6px 0;
+  font-size: 13px;
+}
+.mg-tienlen .mg-tienlen-version button {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+.mg-tienlen .mg-tienlen-variant {
+  color: var(--accent-2);
+  font-weight: 700;
+}
+.mg-tienlen .mg-tienlen-version button.on {
+  opacity: 1;
+  outline: 2px solid var(--accent-2);
+}
+.mg-tienlen .mg-tienlen-place {
+  min-width: 3.2em;
+  font-weight: 700;
+  color: var(--accent-2);
+}

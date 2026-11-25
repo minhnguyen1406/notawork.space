@@ -1,4 +1,4 @@
-import { TL_MAX, TL_MIN, TURN_MS, cardName, isRed, tlIllegal, type TlAction, type TlView } from '../../shared/minigames/tienlen';
+import { TL_MAX, TL_MIN, TURN_MS, VARIANT_NAMES, cardName, isRed, tlIllegal, tlThoi, type TlAction, type TlView, type Variant } from '../../shared/minigames/tienlen';
 import type { ClientGame, GameCtx } from './api';
 import './tienlen.css';
 
@@ -11,7 +11,12 @@ let open = false;
 /** Cards I have clicked but not yet played. */
 const picked = new Set<number>();
 
-const EMPTY: TlView = { phase: 'lobby', players: [], turn: null, table: null, mustInclude: null, left: 0, winner: null, reveal: null, note: null, hand: null };
+const EMPTY: TlView = { variant: 'nam', phase: 'lobby', players: [], turn: null, table: null, mustInclude: null, left: 0, winner: null, results: null, note: null, hand: null };
+/** The lobby's one-paragraph reminder of what is different about each version. */
+const BLURB: Record<Variant, string> = {
+  nam: 'Miền Nam: pairs and straights in any suits, runs of three or more consecutive pairs. A higher play of the same kind wins. Four of a kind and runs of pairs chop 2s. The first play of the first hand includes the lowest card.',
+  bac: 'Miền Bắc: pairs must be the same colour and straights all one suit. A single is beaten by a higher card of the same suit, a pair by a higher pair of the same colour; 2s beat anything lower. Only four of a kind chops 2s. Do not go out on a 2 or on four of a kind: that puts you last.',
+};
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = '') => {
   const e = document.createElement(tag);
@@ -59,8 +64,8 @@ function render() {
   // Everyone at the table, how many cards they hold, and whose turn it is.
   const chips = el('div', 'mg-players');
   for (const pl of v.players) {
-    const cards = v.phase === 'play' ? ` · ${pl.count} ${pl.count === 1 ? 'card' : 'cards'}${pl.passed ? ' · passed' : ''}` : '';
-    const chip = el('span', `mg-chip${pl.id === me ? ' me' : ''}${pl.id === v.turn ? ' turn' : ''}${pl.passed ? ' mg-tienlen-out' : ''}`, pl.name + cards);
+    const cards = v.phase !== 'play' ? '' : pl.out ? ' · out' : ` · ${pl.count} ${pl.count === 1 ? 'card' : 'cards'}${pl.passed ? ' · passed' : ''}`;
+    const chip = el('span', `mg-chip${pl.id === me ? ' me' : ''}${pl.id === v.turn ? ' turn' : ''}${pl.passed || pl.out ? ' mg-tienlen-out' : ''}`, pl.name + cards);
     chip.dataset.count = String(pl.count);
     chips.append(chip);
   }
@@ -74,6 +79,16 @@ function render() {
     deal.disabled = v.players.length < TL_MIN;
     row.append(deal);
   };
+  // Which regional version is being played. Between hands, anyone at the table can switch it.
+  const version = el('div', 'mg-tienlen-version');
+  if (v.phase === 'play' || !playing) version.append(el('span', 'mg-tienlen-variant', VARIANT_NAMES[v.variant]));
+  else
+    for (const k of ['nam', 'bac'] as const) {
+      const b = button(VARIANT_NAMES[k], () => send({ k: 'variant', v: k }), k === v.variant ? 'mg-tienlen-variant on' : '');
+      b.disabled = k === v.variant;
+      version.append(b);
+    }
+  body.push(version);
 
   if (v.phase === 'play') {
     let status: string;
@@ -92,7 +107,8 @@ function render() {
     body.push(table);
     if (v.note) body.push(el('p', 'mg-muted mg-tienlen-note', v.note));
 
-    if (v.hand) {
+    if (v.hand && !hand.length) body.push(el('p', 'mg-muted', 'You are out of cards. The others play on for the remaining places.'));
+    else if (v.hand) {
       const mine = el('div', 'mg-tienlen-cards mg-tienlen-hand');
       for (const c of hand)
         mine.append(
@@ -103,7 +119,9 @@ function render() {
         );
       body.push(mine);
       const cards = [...picked].sort((a, b) => a - b);
-      const why = !myTurn ? 'Wait for your turn.' : cards.length ? tlIllegal(hand, v.table?.cards ?? null, v.mustInclude, cards) : 'Click cards to select them.';
+      const why = !myTurn ? 'Wait for your turn.' : cards.length ? tlIllegal(v.variant, hand, v.table?.cards ?? null, v.mustInclude, cards) : 'Click cards to select them.';
+      // A legal northern play that would cost the player the hand: let them, but say so first.
+      const thoi = why === null ? tlThoi(v.variant, hand, cards) : null;
       const play = button('Play', () => {
         send({ k: 'play', cards });
         picked.clear();
@@ -112,7 +130,7 @@ function render() {
       const pass = button('Pass', () => send({ k: 'pass' }));
       pass.disabled = !myTurn || !v.table;
       row.append(play, pass);
-      body.push(el('p', 'mg-muted mg-tienlen-why', why ?? ''));
+      body.push(el('p', `mg-muted mg-tienlen-why${thoi ? ' warn' : ''}`, why ?? (thoi ? 'Warning (Miền Bắc): going out on a 2 or on four of a kind puts you last (thối).' : '')));
     } else body.push(el('p', 'mg-muted', 'A hand is being played. You can join when it ends.'));
   } else if (v.phase === 'ended') {
     body.push(el('p', 'mg-status', v.note ?? `${v.winner?.name ?? 'Someone'} wins the hand.`));
@@ -121,19 +139,20 @@ function render() {
       table.append(el('div', 'mg-muted', `Last play, by ${v.table.name}`), fan(v.table.cards, 'mg-tienlen-play'));
       body.push(table);
     }
-    // Everyone's leftover cards, face up.
-    const left = el('div', 'mg-tienlen-reveal');
-    for (const r of v.reveal ?? []) {
-      if (!r.cards.length) continue;
+    // The finishing order, with everyone's leftover cards face up.
+    const list = el('div', 'mg-tienlen-results');
+    for (const r of v.results ?? []) {
       const line = el('div', 'mg-tienlen-left');
-      line.append(el('span', 'mg-muted', `${r.name} (${r.cards.length})`), fan(r.cards, 'mg-tienlen-small'));
-      left.append(line);
+      line.append(el('span', 'mg-tienlen-place', r.place || '·'), el('span', '', r.name));
+      if (r.cards.length) line.append(fan(r.cards, 'mg-tienlen-small'));
+      if (r.note) line.append(el('span', 'mg-muted', r.note));
+      list.append(line);
     }
-    body.push(left);
+    body.push(list);
     dealer('Deal again');
   } else {
     body.push(el('p', 'mg-status', v.players.length < TL_MIN ? `Needs ${TL_MIN} to ${TL_MAX} players.` : `Ready: ${v.players.length} of up to ${TL_MAX} players. Deal when everyone is in.`));
-    body.push(el('p', 'mg-muted', 'Get rid of your 13 cards first. Beat the table with the same kind of play, only higher, or pass. 2 is the top rank; hearts is the top suit.'));
+    body.push(el('p', 'mg-muted', 'Get rid of your 13 cards. Beat the table or pass; play goes on until one player is left. 2 is the top rank; hearts is the top suit.'), el('p', 'mg-muted', BLURB[v.variant]));
     dealer('Deal');
   }
   if (!playing && v.phase !== 'play') {
@@ -163,7 +182,7 @@ export const game: ClientGame = {
     const me = ctx.myId();
     // A sound when the turn comes to me, and a fuss when I win.
     if (view.phase === 'play' && view.turn === me && before?.turn !== me) ctx.play('pop');
-    if (view.phase === 'ended' && before?.phase === 'play' && view.winner?.id === me) {
+    if (view.phase === 'ended' && before?.phase !== 'ended' && before && view.winner?.id === me) {
       ctx.play('tada');
       ctx.confetti();
     }

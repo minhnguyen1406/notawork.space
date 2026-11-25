@@ -39,7 +39,11 @@ const texts = await Promise.all(all.map((p) => p.text(who)));
 const it = all[texts.findIndex((t) => t.includes('You are it'))];
 const [prey, far] = all.filter((p) => p !== it);
 check('the others see who is it', (await prey.text(who)).includes('is it') && (await far.text(who)).includes('is it'));
-check('the panel is a slim line with a running clock', /^[01]:\d\d$/.test(await a.text(`${P} .mg-tag-clock`)) && (await a.evaluate((s) => document.querySelector(s).offsetHeight, P)) < 70);
+const clockText = await a.text(`${P} .mg-tag-clock`);
+const height = await a.evaluate((s) => document.querySelector(s).offsetHeight, P);
+// The clock rounds up, so it still reads 2:00 for the first second; "running" means it then counts down.
+check('the panel is a slim line with a clock', /^(2:00|1:5\d)$/.test(clockText) && height < 70);
+check('and the clock counts down', await until(async () => /^1:5\d$/.test(await a.text(`${P} .mg-tag-clock`)), 4000));
 check('walking keys are not swallowed by the panel', (await walked(far, 500)) > 0.3);
 
 // "It" jumps next to someone: the server notices and passes it on.
