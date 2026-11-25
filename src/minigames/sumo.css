@@ -1,0 +1,16 @@
+.mg-sumo .mg-sumo-wins {
+  margin-left: 6px;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+.mg-sumo .mg-chip.turn .mg-sumo-wins {
+  color: inherit;
+}
+.mg-sumo .mg-chip.mg-sumo-out {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.mg-sumo .mg-sumo-clock {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

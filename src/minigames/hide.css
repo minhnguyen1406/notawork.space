@@ -1,0 +1,56 @@
+.mg-hide .mg-hide-facts {
+  font-size: 15px;
+}
+.mg-hide .mg-hide-clock {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.mg-hide .mg-hide-news {
+  font-weight: 700;
+}
+.mg-hide .mg-hide-result {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 10px 0 4px;
+}
+.mg-hide .mg-chip.mg-hide-found {
+  opacity: 0.6;
+}
+
+/* The seeker's blindfold. The card is moved with a transform, so `position: fixed` would be
+   measured from the card, not the window: instead this is a window-sized box centred on the
+   window's middle (62px is the card's distance from the bottom, 1px its border), with a spread
+   shadow of the same colour to cover any sliver that sum leaves. */
+.mg-hide .mg-hide-blind {
+  position: absolute;
+  left: 50%;
+  bottom: -63px;
+  width: 100vw;
+  height: 100vh;
+  margin-left: -50vw;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #07050b;
+  box-shadow: 0 0 0 100vmax #07050b;
+  color: var(--text);
+  cursor: default;
+}
+.mg-hide .mg-hide-blind h3 {
+  margin: 0;
+  font-size: 34px;
+  letter-spacing: 0.04em;
+}
+.mg-hide .mg-hide-blind .mg-hide-count-down {
+  font-size: 120px;
+  line-height: 1;
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+}
+.mg-hide .mg-hide-blind p {
+  color: var(--muted);
+}

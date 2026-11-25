@@ -1,0 +1,86 @@
+.mg-tienlen {
+  text-align: center;
+}
+.mg-tienlen .mg-tienlen-out {
+  opacity: 0.55;
+}
+.mg-tienlen .mg-tienlen-clock {
+  height: 5px;
+  margin: 8px 0;
+  border-radius: 3px;
+  background: rgba(255, 233, 201, 0.12);
+  overflow: hidden;
+}
+.mg-tienlen .mg-tienlen-clock i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent-2);
+}
+.mg-tienlen .mg-tienlen-table {
+  min-height: 96px;
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(40, 110, 80, 0.35);
+  border: 1px solid rgba(255, 233, 201, 0.12);
+}
+.mg-tienlen .mg-tienlen-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+  margin-top: 6px;
+}
+.mg-tienlen .mg-tienlen-hand {
+  margin-top: 18px;
+}
+.mg-tienlen .mg-tienlen-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 52px;
+  height: 72px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid #b9b2a6;
+  background: #fbf7ee;
+  color: #1c1820;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.08s;
+}
+.mg-tienlen .mg-tienlen-card.red {
+  color: #c8242b;
+}
+.mg-tienlen button.mg-tienlen-card {
+  cursor: pointer;
+}
+.mg-tienlen button.mg-tienlen-card:hover {
+  background: #fff;
+}
+.mg-tienlen .mg-tienlen-card.sel {
+  transform: translateY(-12px);
+  box-shadow: 0 0 0 3px var(--accent-2);
+}
+.mg-tienlen .mg-tienlen-small .mg-tienlen-card {
+  width: 38px;
+  height: 50px;
+  font-size: 14px;
+}
+.mg-tienlen .mg-tienlen-left {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0;
+}
+.mg-tienlen .mg-tienlen-left .mg-tienlen-cards {
+  margin-top: 0;
+}
+.mg-tienlen .mg-tienlen-why {
+  min-height: 1.4em;
+}

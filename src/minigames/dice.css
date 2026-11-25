@@ -1,0 +1,95 @@
+.mg-dice.mg-sheet {
+  text-align: center;
+  width: min(620px, calc(100vw - 28px));
+}
+.mg-dice .mg-chip.out {
+  opacity: 0.5;
+}
+.mg-dice .mg-dice-count {
+  font-weight: 600;
+}
+.mg-dice .mg-dice-bid {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.mg-dice .mg-dice-bid b {
+  font-size: 34px;
+  line-height: 1;
+}
+.mg-dice .mg-dice-mine,
+.mg-dice .mg-dice-shown {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.mg-dice .mg-dice-die {
+  line-height: 1;
+  border-radius: 8px;
+  padding: 0 2px;
+}
+.mg-dice .mg-dice-mine .mg-dice-die {
+  font-size: 64px;
+}
+.mg-dice .mg-dice-shown .mg-dice-die {
+  font-size: 34px;
+}
+/* Dice showing the face that was bid. */
+.mg-dice .mg-dice-die.hit {
+  color: var(--accent-2);
+}
+.mg-dice .mg-dice-n {
+  font-size: 26px;
+  min-width: 1.6em;
+}
+.mg-dice .mg-dice-qty button {
+  min-width: 40px;
+  font-size: 18px;
+}
+.mg-dice .mg-dice-faces button {
+  font-size: 30px;
+  line-height: 1;
+  padding: 4px 8px;
+}
+.mg-dice .mg-dice-faces button.on {
+  outline: 2px solid var(--accent-2);
+  color: var(--accent-2);
+}
+.mg-dice .mg-dice-liar {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.mg-dice .mg-dice-result {
+  font-size: 17px;
+  font-weight: 700;
+}
+.mg-dice .mg-dice-hands {
+  display: grid;
+  gap: 4px;
+  margin: 10px auto;
+  width: fit-content;
+}
+.mg-dice .mg-dice-hand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.mg-dice .mg-dice-clock {
+  height: 5px;
+  margin: 10px 0;
+  border-radius: 3px;
+  background: rgba(255, 233, 201, 0.12);
+  overflow: hidden;
+}
+.mg-dice .mg-dice-clock i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent-2);
+}

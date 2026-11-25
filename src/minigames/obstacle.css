@@ -1,0 +1,39 @@
+.mg-obstacle .mg-obstacle-clock {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 6px 0 2px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-2);
+}
+.mg-obstacle .mg-obstacle-board {
+  list-style: none;
+  counter-reset: mg-obstacle-place;
+  margin: 8px auto 0;
+  padding: 0;
+  max-width: 300px;
+  text-align: left;
+}
+.mg-obstacle .mg-obstacle-board li {
+  display: flex;
+  counter-increment: mg-obstacle-place;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.mg-obstacle .mg-obstacle-board li::before {
+  content: counter(mg-obstacle-place) '.';
+  color: var(--muted);
+  min-width: 1.4em;
+}
+.mg-obstacle .mg-obstacle-board li span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg-obstacle .mg-obstacle-board li.me {
+  background: rgba(255, 233, 201, 0.1);
+}

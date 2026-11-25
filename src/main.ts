@@ -473,9 +473,15 @@ let lastScoreTotal = 0;
 const duelUI = new DuelUI(world.scene, avatars, () => myId, (m) => send(m));
 
 // ---------------------------------------------------------------- party games (src/minigames)
-/** Set by a game to root me to the spot, or change how fast I walk. */
+/** Each game's own say on rooting me to the spot and on my walking speed, so two games can't undo each other. */
+const miniFreezes = new Set<string>();
+const miniSpeeds = new Map<string, number>();
 let miniFrozen = false;
 let miniSpeed = 1;
+function miniMovement() {
+  miniFrozen = miniFreezes.size > 0;
+  miniSpeed = [...miniSpeeds.values()].reduce((a, b) => a * b, 1);
+}
 const miniGames = Object.entries(CLIENT_GAMES) as [GameId, ClientGame][];
 for (const [id, game] of miniGames) {
   const panel = document.createElement('div');
@@ -499,8 +505,16 @@ for (const [id, game] of miniGames) {
     panel,
     confetti,
     play,
-    freeze: (on) => (miniFrozen = on),
-    speed: (mult) => (miniSpeed = Math.max(0, Math.min(3, mult))),
+    freeze: (on) => {
+      if (on) miniFreezes.add(id);
+      else miniFreezes.delete(id);
+      miniMovement();
+    },
+    speed: (mult) => {
+      if (mult === 1) miniSpeeds.delete(id);
+      else miniSpeeds.set(id, Math.max(0, Math.min(3, mult)));
+      miniMovement();
+    },
     put: (x, z) => me?.place(x, z, me.ry),
   });
 }
@@ -622,9 +636,13 @@ function handle(msg: ServerMsg) {
       break;
     case 'put':
       if (me) {
-        if (typeof msg.x === 'number' && typeof msg.z === 'number') me.place(msg.x, msg.z, me.ry);
-        else me.place(me.x + (msg.dx ?? 0), me.z + (msg.dz ?? 0), me.ry);
-        velX = velZ = 0;
+        if (typeof msg.x === 'number' && typeof msg.z === 'number') {
+          me.place(msg.x, msg.z, me.ry);
+          velX = velZ = 0;
+        } else {
+          // A shove: slide by that much and keep walking, so leaning on someone doesn't stutter.
+          me.place(me.x + (msg.dx ?? 0), me.z + (msg.dz ?? 0), me.ry);
+        }
       }
       break;
     case 'duelAsk':
@@ -804,9 +822,10 @@ function lostRoom() {
   for (const id of [...avatars.keys()]) removeAvatar(id);
   cams.clear();
   duelUI.clear();
-  miniFrozen = false;
-  miniSpeed = 1;
   for (const [, g] of miniGames) g.reset?.();
+  miniFreezes.clear();
+  miniSpeeds.clear();
+  miniMovement();
   tableViews.clear();
   mediaRound++;
   const old = media;

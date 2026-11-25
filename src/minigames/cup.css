@@ -1,0 +1,63 @@
+.mg-cup .mg-cup-board {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 14px;
+}
+.mg-cup .mg-cup-score {
+  font-size: 20px;
+  font-weight: 700;
+}
+.mg-cup .mg-cup-clock {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-2);
+}
+.mg-cup .mg-cup-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: center;
+}
+.mg-cup .mg-cup-team .mg-players {
+  margin: 4px 0 0;
+}
+.mg-cup .mg-cup-red .mg-chip {
+  border-color: rgba(235, 87, 87, 0.7);
+}
+.mg-cup .mg-cup-blue .mg-chip {
+  border-color: rgba(86, 156, 235, 0.7);
+}
+.mg-cup .mg-cup-last {
+  margin-top: 8px;
+}
+/* During a match the card shrinks and lets clicks through everywhere except its buttons,
+   so it never gets between a player and the pitch. */
+.mg-cup.mg-cup-live {
+  width: min(440px, calc(100vw - 28px));
+  padding: 8px 12px;
+  pointer-events: none;
+  background: rgba(20, 15, 26, 0.8);
+}
+.mg-cup.mg-cup-live button {
+  pointer-events: auto;
+}
+.mg-cup.mg-cup-live h2 {
+  display: none;
+}
+.mg-cup.mg-cup-live .mg-status {
+  margin: 2px 0;
+  font-size: 13px;
+}
+.mg-cup.mg-cup-live .mg-cup-team b,
+.mg-cup.mg-cup-live .mg-chip {
+  font-size: 12px;
+}
+.mg-cup.mg-cup-live .mg-row {
+  margin-top: 4px;
+}
+.mg-cup.mg-cup-live .mg-row button {
+  padding: 3px 10px;
+  font-size: 12px;
+}

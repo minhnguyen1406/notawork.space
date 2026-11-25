@@ -1,0 +1,60 @@
+/* While a game runs the card shrinks to one slim line so the room stays visible. */
+.mg-tag.mg-tag-live {
+  width: auto;
+  max-width: calc(100vw - 28px);
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(20, 15, 26, 0.82);
+}
+.mg-tag .mg-tag-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+.mg-tag .mg-tag-who {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mg-tag .mg-tag-who.me {
+  color: var(--accent-2);
+}
+.mg-tag .mg-tag-clock {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.6em;
+}
+.mg-tag .mg-tag-mine {
+  font-variant-numeric: tabular-nums;
+  min-width: 4.6em;
+}
+.mg-tag .mg-tag-small {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.mg-tag .mg-tag-rank {
+  list-style: decimal inside;
+  margin: 6px auto;
+  padding: 0;
+  max-width: 320px;
+  max-height: 150px;
+  overflow-y: auto;
+  text-align: left;
+}
+.mg-tag .mg-tag-rank li {
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+.mg-tag .mg-tag-rank li span + span {
+  float: right;
+}
+.mg-tag .mg-tag-rank li.win {
+  font-weight: 700;
+  color: var(--accent-2);
+}
+.mg-tag .mg-tag-rank li.me {
+  background: rgba(255, 233, 201, 0.1);
+}

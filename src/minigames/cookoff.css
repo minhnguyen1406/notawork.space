@@ -1,0 +1,58 @@
+/* While the contest runs the card is narrower, so less of the kitchen is hidden behind it. */
+.mg-cookoff.mg-cookoff-live {
+  width: min(460px, calc(100vw - 28px));
+  padding: 10px 14px;
+}
+.mg-cookoff.mg-cookoff-live h2 {
+  font-size: 14px;
+  color: var(--muted);
+}
+.mg-cookoff .mg-cookoff-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+.mg-cookoff .mg-cookoff-team {
+  border-radius: 12px;
+  padding: 6px 8px;
+  background: rgba(255, 233, 201, 0.06);
+  border-top: 3px solid transparent;
+}
+.mg-cookoff .mg-cookoff-red {
+  border-top-color: #e4572e;
+}
+.mg-cookoff .mg-cookoff-blue {
+  border-top-color: #4d9de0;
+}
+.mg-cookoff .mg-cookoff-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 700;
+}
+.mg-cookoff .mg-cookoff-score {
+  font-size: 24px;
+  line-height: 1;
+}
+.mg-cookoff .mg-cookoff-order {
+  margin-top: 4px;
+  font-size: 14px;
+}
+.mg-cookoff .mg-cookoff-team .mg-players {
+  margin: 6px 0 2px;
+}
+.mg-cookoff .mg-cookoff-clock {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.mg-cookoff .mg-cookoff-feed {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mg-cookoff .mg-cookoff-result {
+  font-weight: 700;
+}

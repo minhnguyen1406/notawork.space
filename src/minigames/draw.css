@@ -1,0 +1,133 @@
+.mg-draw .mg-draw-word {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  min-height: 1.3em;
+  margin: 2px 0;
+}
+.mg-draw .mg-draw-clock {
+  height: 5px;
+  margin: 8px 0 10px;
+  border-radius: 3px;
+  background: rgba(255, 233, 201, 0.12);
+  overflow: hidden;
+}
+.mg-draw .mg-draw-clock i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent-2);
+}
+.mg-draw .mg-draw-main {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.mg-draw .mg-draw-stage {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.mg-draw canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 12 / 7;
+  border-radius: 10px;
+  border: 3px solid #1b1620;
+  background: #fff;
+  /* Dragging on the picture must draw, not scroll the page. */
+  touch-action: none;
+}
+.mg-draw canvas.can-draw {
+  cursor: crosshair;
+}
+.mg-draw .mg-draw-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+.mg-draw .mg-draw-tools[hidden],
+.mg-draw .mg-draw-guess[hidden],
+.mg-draw .mg-draw-clock[hidden] {
+  display: none;
+}
+.mg-draw .mg-draw-colour,
+.mg-draw .mg-draw-width {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  display: grid;
+  place-items: center;
+}
+.mg-draw .mg-draw-colour.on,
+.mg-draw .mg-draw-width.on {
+  outline: 3px solid var(--accent-2);
+  outline-offset: 1px;
+}
+.mg-draw .mg-draw-width i {
+  display: block;
+  border-radius: 50%;
+  background: var(--text);
+}
+.mg-draw .mg-draw-side {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.mg-draw .mg-draw-side .mg-players {
+  justify-content: flex-start;
+  margin: 0;
+}
+.mg-draw .mg-draw-feed {
+  min-height: 150px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 233, 201, 0.06);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.mg-draw .mg-draw-feed p {
+  margin: 2px 0;
+}
+.mg-draw .mg-draw-feed p.ok {
+  color: #6fdc9a;
+  font-weight: 700;
+}
+.mg-draw .mg-draw-rank {
+  margin: 0;
+  padding-left: 22px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.mg-draw .mg-draw-rank li.me {
+  color: var(--accent-2);
+  font-weight: 700;
+}
+.mg-draw .mg-draw-guess {
+  display: flex;
+  gap: 6px;
+}
+.mg-draw .mg-draw-guess input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .mg-draw .mg-draw-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mg-draw .mg-draw-side {
+    flex: none;
+  }
+  .mg-draw .mg-draw-feed {
+    min-height: 60px;
+    max-height: 110px;
+  }
+}

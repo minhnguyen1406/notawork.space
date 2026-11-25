@@ -1,0 +1,187 @@
+.mg-words {
+  --w-red: #d9483b;
+  --w-blue: #2f7fd1;
+  --w-neutral: #cbb894;
+  --w-trap: #0b0a0d;
+  text-align: center;
+}
+.mg-words .mg-words-result {
+  font-size: 18px;
+  font-weight: 700;
+}
+.mg-words .mg-words-result.red {
+  color: var(--w-red);
+}
+.mg-words .mg-words-result.blue {
+  color: var(--w-blue);
+}
+
+/* Whose turn, the clue and the clock. */
+.mg-words .mg-words-turn {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+}
+.mg-words .mg-words-turn.red {
+  border-color: var(--w-red);
+  background: rgba(217, 72, 59, 0.16);
+}
+.mg-words .mg-words-turn.blue {
+  border-color: var(--w-blue);
+  background: rgba(47, 127, 209, 0.16);
+}
+.mg-words .mg-words-clue {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.mg-words .mg-words-time {
+  font-variant-numeric: tabular-nums;
+  min-width: 3.2em;
+  text-align: right;
+}
+.mg-words .mg-words-clock {
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: rgba(255, 233, 201, 0.12);
+  overflow: hidden;
+}
+.mg-words .mg-words-clock i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent-2);
+}
+
+/* The grid: five by five. */
+.mg-words .mg-words-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+  margin: 12px 0 8px;
+}
+.mg-words .mg-words-cell {
+  min-height: 52px;
+  padding: 6px 2px;
+  border: 3px solid rgba(255, 233, 201, 0.22);
+  border-radius: 10px;
+  background: #efe3cb;
+  color: #2a1f14;
+  font-size: clamp(10px, 1.7vw, 15px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  overflow-wrap: anywhere;
+}
+/* Cards stay fully readable when they cannot be clicked (the shared style would fade them). */
+.mg-words .mg-words-cell:disabled {
+  opacity: 1;
+}
+.mg-words .mg-words-cell:not(:disabled) {
+  cursor: pointer;
+}
+.mg-words .mg-words-cell:not(:disabled):hover {
+  border-color: var(--accent-2);
+  transform: translateY(-1px);
+}
+
+/* Turned over: solid team colour for everyone. */
+.mg-words .mg-words-cell.open {
+  border-color: transparent;
+  color: #fff;
+}
+.mg-words .mg-words-cell.open.k-red {
+  background: var(--w-red);
+}
+.mg-words .mg-words-cell.open.k-blue {
+  background: var(--w-blue);
+}
+.mg-words .mg-words-cell.open.k-neutral {
+  background: var(--w-neutral);
+  color: #5a4a30;
+}
+.mg-words .mg-words-cell.open.k-trap {
+  background: var(--w-trap);
+  border-color: #fff;
+}
+.mg-words .mg-words-cell.open.k-trap::before {
+  content: '✖ ';
+}
+
+/* Face down but known (the clue-giver's map, or the reveal after a game): a tint and a coloured edge. */
+.mg-words .mg-words-cell.s-red {
+  border-color: var(--w-red);
+  background: #f6c5bf;
+}
+.mg-words .mg-words-cell.s-blue {
+  border-color: var(--w-blue);
+  background: #bcd9f5;
+}
+.mg-words .mg-words-cell.s-neutral {
+  border-color: #a8987a;
+  background: #e6dcc6;
+}
+.mg-words .mg-words-cell.s-trap {
+  border-color: #fff;
+  background: #3a3440;
+  color: #fff;
+}
+/* For the clue-giver, cards already found fade back so what is left stands out. */
+.mg-words .mg-words-grid.secret .mg-words-cell.open {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.mg-words .mg-words-input {
+  width: 190px;
+  text-transform: uppercase;
+}
+.mg-words .mg-words-num {
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+/* Rosters, side by side. */
+.mg-words .mg-words-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+.mg-words .mg-words-team {
+  border-radius: 12px;
+  padding: 6px 8px;
+  border: 2px solid transparent;
+}
+.mg-words .mg-words-team h3 {
+  margin: 2px 0;
+  font-size: 15px;
+}
+.mg-words .mg-words-team.red {
+  background: rgba(217, 72, 59, 0.14);
+}
+.mg-words .mg-words-team.red h3 {
+  color: #ff8d80;
+}
+.mg-words .mg-words-team.blue {
+  background: rgba(47, 127, 209, 0.14);
+}
+.mg-words .mg-words-team.blue h3 {
+  color: #8cc2ff;
+}
+.mg-words .mg-words-team.red.turn {
+  border-color: var(--w-red);
+}
+.mg-words .mg-words-team.blue.turn {
+  border-color: var(--w-blue);
+}
+.mg-words .mg-chip.giver {
+  font-weight: 700;
+}
