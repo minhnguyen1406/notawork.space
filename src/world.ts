@@ -17,12 +17,15 @@ import {
 } from '../shared/layout';
 import { textSprite } from './avatar';
 import { Billboard } from './billboard';
+import { WorkSign } from './fun';
 
 export interface World {
   scene: THREE.Scene;
   /** Put a live video on the cinema screen, or pass null to go back to the idle card. */
   setScreenVideo(el: HTMLVideoElement | null): void;
   setBoard(board: Board): void;
+  /** When work was last mentioned in chat (this computer's clock), or null if never. */
+  setWork(at: number | null, by: string): void;
   update(time: number, dt: number): void;
 }
 
@@ -464,6 +467,22 @@ export function buildWorld(): World {
   kitchenSign.position.set(P.x1 - 0.2, P.h + 0.75, 3);
   scene.add(kitchenSign);
 
+  // --- This is not a workspace: a safety board counting minutes without work talk, and a few signs.
+  const workSign = new WorkSign(5.4, 3.3);
+  workSign.group.position.set(-22.8, 3.1, SCREEN.z + 0.2);
+  scene.add(workSign.group);
+  for (const dx of [-2, 2]) scene.add(box(0.3, 3.1, 0.3, '#2a2230', -22.8 + dx, 1.55, SCREEN.z - 0.1));
+  const jokes: [string, string, number, number, number, number][] = [
+    ['OUT OF OFFICE', '#ff7ac8', 0.8, -NEWS_WALL.x, NEWS_WALL.y + NEWS_WALL.h / 2 + 0.85, SCREEN.z + 0.25],
+    ['404: WORK NOT FOUND', '#8fd7ff', 0.8, NEWS_WALL.x, NEWS_WALL.y + NEWS_WALL.h / 2 + 0.85, SCREEN.z + 0.25],
+    ['CTRL + ALT + RELAX', '#ffd166', 0.75, (P.x1 + P.x2) / 2, P.h + 0.75, P.z2 + 0.25],
+  ];
+  for (const [text, color, size, x, y, z] of jokes) {
+    const sign = neonSign(text, color, size);
+    sign.position.set(x, y, z);
+    scene.add(sign);
+  }
+
   // --- Plants
   for (const p of PLANTS) scene.add(plant(p.x, p.z, p.scale));
 
@@ -474,6 +493,7 @@ export function buildWorld(): World {
   return {
     scene,
     setBoard: (board) => billboard.setBoard(board),
+    setWork: (at, by) => workSign.set(at, by),
     setScreenVideo(el) {
       screenTex?.dispose();
       screenTex = null;
@@ -502,6 +522,7 @@ export function buildWorld(): World {
         }
       }
       billboard.update(time);
+      workSign.update();
       for (const b of bulbs) b.scale.setScalar(1 + Math.sin(time * 2 + b.userData.phase) * 0.18);
 
       // Fire: flames lick, sparks rise, the light flickers.

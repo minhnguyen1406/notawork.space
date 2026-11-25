@@ -44,6 +44,8 @@ export type ClientMsg =
   | { t: 'join'; name: string; color: string; password?: string }
   | { t: 'move'; x: number; z: number; ry: number }
   | { t: 'chat'; text: string }
+  /** A reaction over your head, a dance, or a snooze (see shared/fun.ts). */
+  | { t: 'emote'; k: string }
   | { t: 'sit'; seat: string | null }
   | { t: 'use'; station: string }
   | { t: 'act'; station: string }
@@ -62,6 +64,8 @@ export type ServerMsg =
       board: Board;
       games: GamesState;
       media: { url: string; token: string } | null;
+      /** Who last mentioned work in chat and how many ms ago, or null if nobody has. */
+      work: { ago: number; by: string } | null;
     }
   | { t: 'denied'; reason: 'full' | 'password' }
   | { t: 'join'; player: PlayerInfo }
@@ -71,6 +75,9 @@ export type ServerMsg =
   | { t: 'chat'; id: string; name: string; text: string }
   | { t: 'kitchen'; state: KitchenState }
   | { t: 'notice'; text: string }
+  | { t: 'emote'; id: string; k: string }
+  /** Someone said a work word in chat. */
+  | { t: 'work'; by: string; word: string }
   | { t: 'board'; board: Board }
   | { t: 'ball'; ball: BallState }
   | { t: 'score'; score: [number, number] }

@@ -1,3 +1,4 @@
+import { EMOTES, workWord } from '../../shared/fun';
 import { DurableObject } from 'cloudflare:workers';
 import {
   COLORS,
@@ -49,6 +50,7 @@ interface Player extends PlayerInfo {
   ws: WebSocket;
   lastSeen: number;
   lastChat: number;
+  lastEmote: number;
 }
 
 const clamp = (v: unknown, limit: number) => range(v, -limit, limit);
@@ -76,6 +78,8 @@ export class Room extends DurableObject<Env> {
   private wheelBusyUntil = 0;
   private board: Board = { news: [], stocks: [], at: 0 };
   private boardBusy = false;
+  /** The last time someone mentioned work in chat. */
+  private work: { at: number; by: string } | null = null;
 
   /** Refresh headlines and prices if they are older than ten minutes. */
   private refreshBoard() {
@@ -218,8 +222,19 @@ export class Room extends DurableObject<Env> {
         if (!text || me.lastSeen - me.lastChat < 300) return; // light spam guard
         me.lastChat = me.lastSeen;
         this.broadcast({ t: 'chat', id: me.id, name: me.name, text });
+        const word = workWord(text);
+        if (word) {
+          this.work = { at: Date.now(), by: me.name };
+          this.broadcast({ t: 'work', by: me.name, word });
+        }
         break;
       }
+
+      case 'emote':
+        if (!EMOTES.includes(msg.k) || me.lastSeen - me.lastEmote < 250) return;
+        me.lastEmote = me.lastSeen;
+        this.broadcast({ t: 'emote', id: me.id, k: msg.k });
+        break;
 
       case 'game':
         if (typeof msg.table === 'string') this.tables.action(me, msg.table, msg.a);
@@ -358,6 +373,7 @@ export class Room extends DurableObject<Env> {
       ws,
       lastSeen: Date.now(),
       lastChat: 0,
+      lastEmote: 0,
     };
 
     let media: { url: string; token: string } | null = null;
@@ -386,6 +402,7 @@ export class Room extends DurableObject<Env> {
       board: this.board,
       games: this.games,
       media,
+      work: this.work && { ago: Date.now() - this.work.at, by: this.work.by },
     });
     this.refreshBoard();
     this.broadcast({ t: 'join', player: publicInfo(me) }, ws);

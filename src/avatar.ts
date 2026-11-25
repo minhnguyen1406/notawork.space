@@ -38,6 +38,22 @@ export function textSprite(text: string, height: number, opts: { bg?: string; fg
   return sprite;
 }
 
+/** A single emoji that always faces the camera. */
+export function emojiSprite(emoji: string, size: number): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = '96px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, 64, 70);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true }));
+  sprite.scale.setScalar(size);
+  return sprite;
+}
+
 export function disposeSprite(s: THREE.Sprite) {
   s.removeFromParent();
   s.material.map?.dispose();
@@ -143,6 +159,22 @@ export class Avatar {
     this.ry = this.try_ = ry;
   }
 
+  private floats: { sprite: THREE.Sprite; born: number; life: number }[] = [];
+  private danceUntil = 0;
+
+  /** A reaction that floats up over the head, a dance, or a snooze. */
+  emote(k: string) {
+    const now = performance.now();
+    if (k === 'dance') {
+      this.danceUntil = now + 4500;
+      return;
+    }
+    const sprite = emojiSprite(k === 'zzz' ? '💤' : k, 0.9);
+    sprite.position.set((Math.random() - 0.5) * 0.5, this.video ? 4.6 : 3.1, 0);
+    this.group.add(sprite);
+    this.floats.push({ sprite, born: now, life: k === 'zzz' ? 3200 : 1900 });
+  }
+
   say(text: string) {
     if (this.bubble) disposeSprite(this.bubble);
     const short = text.length > 60 ? text.slice(0, 57) + '…' : text;
@@ -211,6 +243,33 @@ export class Avatar {
     this.arms[1].rotation.x = this.hold.children.length ? -1.1 : swing * 0.8;
     const targetY = sitting ? -0.12 : this.walking ? Math.abs(Math.sin(this.phase)) * 0.06 : 0;
     this.inner.position.y += (targetY - this.inner.position.y) * Math.min(1, dt * 14);
+
+    const now = performance.now();
+    // Dancing: spin, bounce, arms in the air.
+    const dancing = now < this.danceUntil && !sitting && !this.walking;
+    if (dancing) {
+      const t = now / 1000;
+      this.inner.rotation.y = Math.sin(t * 5) * 0.9;
+      this.inner.position.y = Math.abs(Math.sin(t * 9)) * 0.22;
+      this.arms[0].rotation.x = -2.7 + Math.sin(t * 9) * 0.4;
+      this.arms[1].rotation.x = -2.7 - Math.sin(t * 9) * 0.4;
+      this.legs[0].rotation.x = Math.sin(t * 9) * 0.35;
+      this.legs[1].rotation.x = -Math.sin(t * 9) * 0.35;
+    } else {
+      this.inner.rotation.y *= Math.max(0, 1 - dt * 10);
+    }
+    for (let i = this.floats.length - 1; i >= 0; i--) {
+      const f = this.floats[i];
+      const age = (now - f.born) / f.life;
+      if (age >= 1) {
+        disposeSprite(f.sprite);
+        this.floats.splice(i, 1);
+        continue;
+      }
+      f.sprite.position.y += dt * 0.9;
+      f.sprite.material.opacity = age < 0.7 ? 1 : (1 - age) / 0.3;
+      f.sprite.scale.setScalar(0.9 * Math.min(1, age * 8));
+    }
 
     if (this.bubble && performance.now() > this.bubbleUntil) {
       disposeSprite(this.bubble);

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { sceneColliders, showColliders } from './collide';
+import { confetti, flash, play } from './fun';
+import { EMOJI } from '../shared/fun';
 import type { Collider } from '../shared/layout';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -386,6 +388,8 @@ for (const b of [btnMic, btnCam, btnShare]) b.hidden = true;
 
 // ---------------------------------------------------------------- network
 
+let lastScoreTotal = 0;
+
 function handle(msg: ServerMsg) {
   switch (msg.t) {
     case 'welcome': {
@@ -397,6 +401,8 @@ function handle(msg: ServerMsg) {
       kitchen.setState(msg.kitchen, avatars);
       world.setBoard(msg.board);
       games.setAll(msg.games);
+      lastScoreTotal = msg.games.score[0] + msg.games.score[1];
+      if (msg.work) world.setWork(Date.now() - msg.work.ago, msg.work.by);
       renderMenu();
       $('join').hidden = true;
       $('hud').hidden = false;
@@ -445,7 +451,25 @@ function handle(msg: ServerMsg) {
     case 'notice':
       toast(msg.text);
       logLine(msg.text);
+      if (/\b(won|wins|new record)\b/i.test(msg.text)) {
+        confetti();
+        play('tada');
+      }
       break;
+    case 'emote':
+      avatars.get(msg.id)?.emote(msg.k);
+      if (msg.k !== 'zzz' && msg.id !== myId) play('pop');
+      break;
+    case 'work': {
+      world.setWork(Date.now(), msg.by);
+      flash();
+      play('alarm');
+      const line = `🚨 Work talk detected: “${msg.word}”. ${msg.by} owes the room a round.`;
+      toast(line);
+      logLine(line);
+      for (const a of avatars.values()) if (a.info.name === msg.by) a.emote('🚨');
+      break;
+    }
     case 'board':
       world.setBoard(msg.board);
       break;
@@ -457,6 +481,11 @@ function handle(msg: ServerMsg) {
       games.syncBall(msg.ball);
       break;
     case 'score':
+      if (msg.score[0] + msg.score[1] > lastScoreTotal) {
+        confetti(['⚽', '🎉', '🥅', '✨']);
+        play('horn');
+      }
+      lastScoreTotal = msg.score[0] + msg.score[1];
       games.setScore(msg.score);
       break;
     case 'laps':
@@ -656,6 +685,17 @@ addEventListener('keydown', (e) => {
         applyMic();
       }
       return;
+    case 'Digit1':
+    case 'Digit2':
+    case 'Digit3':
+    case 'Digit4':
+    case 'Digit5':
+    case 'Digit6':
+      if (!e.repeat) emote(EMOJI[+e.code.slice(5) - 1]);
+      return;
+    case 'Digit7':
+      if (!e.repeat) emote('dance');
+      return;
     case 'KeyM':
       if (!e.repeat) {
         micLatched = !micLatched;
@@ -668,6 +708,17 @@ addEventListener('keydown', (e) => {
   }
   keys.add(e.code);
 });
+function emote(k: string) {
+  send({ t: 'emote', k });
+  if (k !== 'zzz') play('pop');
+}
+// Nod off after two minutes without touching anything.
+let lastInput = Date.now();
+for (const type of ['keydown', 'pointerdown', 'pointermove', 'wheel']) addEventListener(type, () => (lastInput = Date.now()), { passive: true });
+setInterval(() => {
+  if (me && Date.now() - lastInput > 120_000) emote('zzz');
+}, 6000);
+
 function releaseTalk() {
   if (!talkHeld) return;
   talkHeld = false;
