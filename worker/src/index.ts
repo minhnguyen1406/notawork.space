@@ -29,7 +29,7 @@ export interface Env {
 
 const LIVEKIT_ROOM = 'main';
 const REACH = 3.5; // how close you must be to a station to use it
-const STALE_MS = 60_000;
+const STALE_MS = 180_000; // browsers slow a hidden tab's timers to as little as once a minute
 const WHEEL_SPIN_MS = 4500;
 const WHEEL_MAX_NAMES = 12;
 const LAPS_KEPT = 5;

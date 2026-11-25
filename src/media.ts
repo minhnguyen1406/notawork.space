@@ -1,6 +1,7 @@
 import {
   Room,
   RoomEvent,
+  ScreenSharePresets,
   Track,
   VideoPresets,
   VideoQuality,
@@ -219,7 +220,17 @@ export class Media {
 
   async toggleScreen() {
     const p = this.room.localParticipant;
-    await p.setScreenShareEnabled(!p.isScreenShareEnabled, { audio: true, contentHint: 'motion' });
+    // Tuned for video rather than slides: 720p at 30 frames a second, keeping motion smooth when
+    // the connection is tight, and shared sound left unprocessed (voice clean-up ruins music).
+    await p.setScreenShareEnabled(
+      !p.isScreenShareEnabled,
+      {
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        contentHint: 'motion',
+        resolution: ScreenSharePresets.h720fps30.resolution,
+      },
+      { screenShareEncoding: ScreenSharePresets.h720fps30.encoding, degradationPreference: 'maintain-framerate' },
+    );
     return p.isScreenShareEnabled;
   }
 

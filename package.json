@@ -8,7 +8,9 @@
     "build": "npm run typecheck && vitest run && vite build",
     "deploy:server": "wrangler deploy --config worker/wrangler.jsonc",
     "test": "vitest run",
-    "test:server": "node tests/server/run.mjs"
+    "test:server": "node tests/server/run.mjs",
+    "claude:join": "node tools/claude-bot.mjs --detach",
+    "claude:leave": "node tools/claude-bot.mjs --leave"
   },
   "dependencies": {
     "chess.js": "^1.4.0",
@@ -19,6 +21,7 @@
     "@cloudflare/workers-types": "^5.20261124.2",
     "@types/three": "^0.187.0",
     "concurrently": "^10.0.7",
+    "puppeteer-core": "^25.18.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.1",
