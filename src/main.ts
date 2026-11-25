@@ -236,6 +236,7 @@ function renderGrid() {
     if (video) {
       video.muted = true;
       video.playsInline = true;
+      if (a.info.id === myId) video.classList.add('mirror'); // your own picture, as in a mirror
       gridVideos.push(video);
       tile.append(video);
     } else {
@@ -945,6 +946,7 @@ if (import.meta.env.DEV) {
     media: () => media?.debug() ?? null,
     cams: () => Object.fromEntries([...cams].map(([id, el]) => [id, el.videoWidth])),
     drawn: () => ({ screen: world.screenFrames(), cams: Object.fromEntries([...avatars].map(([id, a]) => [id, a.videoFrames])) }),
+    mirrored: () => Object.fromEntries([...avatars].map(([id, a]) => [id, a.mirrored])),
     camState: () => [...cams].map(([id, el]) => ({ id, paused: el.paused, t: el.currentTime, onPage: el.isConnected })),
     speaking: () => [...speaking],
   };

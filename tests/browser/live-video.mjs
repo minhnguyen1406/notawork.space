@@ -43,6 +43,10 @@ check('the viewer receives the camera', await until(async () => (await b.evaluat
 await sleep(2000);
 const state = (await b.evaluate(() => window.__debug.camState())).find((c) => c.id === aid);
 check('the camera video is on the page and playing', state.onPage && !state.paused);
+// Like FaceTime and Zoom: you see yourself mirrored, everyone else sees you the true way round.
+await sleep(500);
+check('your own bubble is mirrored for you', (await a.evaluate(() => window.__debug.mirrored()))[aid] === true);
+check('and not mirrored for the other person', (await b.evaluate(() => window.__debug.mirrored()))[aid] === false);
 const drawn = () => b.evaluate(() => window.__debug.drawn());
 const c1 = (await drawn()).cams[aid];
 await sleep(2000);
@@ -66,6 +70,21 @@ const t1 = (await b.evaluate(() => window.__debug.camState())).find((c) => c.id 
 await sleep(1000);
 const t2 = (await b.evaluate(() => window.__debug.camState())).find((c) => c.id === aid).t;
 check(`the video clock keeps running (${t1.toFixed(1)} → ${t2.toFixed(1)})`, t2 > t1 + 0.5);
+// Face grid: sit both down by the fire and look at the tiles.
+await a.click('#btn-share'); // stop sharing
+const seats = await a.evaluate(async () => (await import('/shared/layout.ts')).SEATS.filter((x) => x.group === 'lounge').slice(0, 2).map((x) => [x.x, x.z]));
+for (const [page, [x, z]] of [[a, seats[0]], [b, seats[1]]]) {
+  await page.evaluate((px, pz) => window.__debug.tp(px + 0.9, pz + 0.9), x, z);
+  await sleep(700);
+  await page.keyboard.press('KeyE');
+}
+await sleep(2500);
+const tiles = (page) => page.evaluate(() => [...document.querySelectorAll('#grid-tiles .tile')].map((t) => ({ name: t.querySelector('.tile-name')?.textContent, video: !!t.querySelector('video'), mirror: !!t.querySelector('video.mirror') })));
+const ta = await tiles(a);
+const tb = await tiles(b);
+check('in the face grid your own picture is mirrored', ta.some((t) => t.name?.includes('(you)') && t.video && t.mirror));
+check("and the other person sees you un-mirrored", tb.some((t) => t.name === 'Ann' && t.video && !t.mirror));
+if (out) await a.screenshot({ path: `${out}/grid-own.png` });
 console.log(failed ? `${failed} FAILED` : 'ALL PASSED');
 await a.owner.close();
 await b.owner.close();

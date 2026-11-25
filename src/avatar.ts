@@ -86,7 +86,7 @@ export class Avatar {
   private phase = 0;
   private bubble: THREE.Sprite | null = null;
   private bubbleUntil = 0;
-  private video: { holder: THREE.Group; tex: THREE.VideoTexture; el: HTMLVideoElement; ring: THREE.Mesh; aspect: number } | null =
+  private video: { holder: THREE.Group; tex: THREE.VideoTexture; el: HTMLVideoElement; ring: THREE.Mesh; face: THREE.Mesh; aspect: number } | null =
     null;
 
   constructor(readonly info: PlayerInfo) {
@@ -160,6 +160,10 @@ export class Avatar {
   }
 
   private videoTime = -1;
+  /** True if this person's camera bubble is drawn mirrored (only ever your own). */
+  get mirrored() {
+    return this.video ? this.video.face.scale.x < 0 : false;
+  }
   /** How many camera frames have been copied into the 3D bubble (for the tests). */
   get videoFrames() {
     return this.video?.tex.version ?? 0;
@@ -208,7 +212,8 @@ export class Avatar {
     const holder = new THREE.Group();
     const face = new THREE.Mesh(
       new THREE.CircleGeometry(0.72, 40),
-      new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }),
+      // Double-sided so it still shows when flipped for the mirror view (see update).
+      new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, side: THREE.DoubleSide }),
     );
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.72, 0.82, 40),
@@ -217,7 +222,7 @@ export class Avatar {
     holder.add(face, ring);
     holder.position.y = 3.75;
     this.group.add(holder);
-    this.video = { holder, tex, el, ring, aspect: 0 };
+    this.video = { holder, tex, el, ring, face, aspect: 0 };
   }
 
   setSpeaking(on: boolean) {
@@ -286,6 +291,8 @@ export class Avatar {
       this.video.holder.quaternion.copy(this.group.quaternion).invert().multiply(camera.quaternion);
       // Crop the picture to a centred square so it fills the circle.
       const { el, tex } = this.video;
+      // You see yourself as in a mirror, like FaceTime and Zoom; everyone else sees you the true way round.
+      this.video.face.scale.x = this.local ? -1 : 1;
       // Copy each new camera frame ourselves; see the note on the cinema screen in world.ts.
       if (el.readyState >= 2 && el.currentTime !== this.videoTime) {
         this.videoTime = el.currentTime;

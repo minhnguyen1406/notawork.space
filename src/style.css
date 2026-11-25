@@ -1043,3 +1043,8 @@ kbd {
   z-index: 26;
   pointer-events: none;
 }
+
+/* Your own camera in the face grid, shown as in a mirror */
+.tile video.mirror {
+  transform: scaleX(-1);
+}
