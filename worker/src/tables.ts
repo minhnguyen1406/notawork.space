@@ -1,5 +1,6 @@
 import { Chess } from 'chess.js';
 import { seatGroup } from '../../shared/layout';
+import { NPC_ID } from '../../shared/fun';
 import {
   currentPlayer,
   drawCard,
@@ -34,7 +35,12 @@ export interface TableIO {
   sitters(): Sitter[];
   send(id: string, table: string, view: unknown): void;
   notice(text: string): void;
+  /** Have the Claude character say something or react. */
+  botSay(text: string): void;
+  botEmote(k: string): void;
 }
+
+const pick = <T>(list: T[]) => list[Math.floor(Math.random() * list.length)];
 
 const WHITE_SEAT = 'chess:0';
 const BLACK_SEAT = 'chess:1';
@@ -68,6 +74,16 @@ export class Tables {
     const was = seatGroup(before);
     const now = seatGroup(p.seat);
     if (was === 'cards' && now !== 'cards') this.leaveCards(p.id);
+    // Someone has sat down opposite Claude at the chess board.
+    const bot = this.chessBot();
+    if (now === 'chess' && p.id !== NPC_ID && bot && (p.seat === WHITE_SEAT || p.seat === BLACK_SEAT)) {
+      const fresh = this.chess.history().length === 0;
+      this.io.botSay(
+        !fresh ? `Welcome, ${p.name}. We pick up where the board was left; "New game" starts over.`
+        : bot === 'b' ? `Good luck, ${p.name}. You're White, so it's your move.`
+        : `Good luck, ${p.name}. I'm White, here we go.`,
+      );
+    }
     if (was === 'poker' && now !== 'poker') pokerLeave(this.poker, p.id);
     if (was === 'wolf' && now !== 'wolf') this.announceWolf(() => wolfLeave(this.wolf, p.id, Date.now()));
     if (was === 'pho' && now !== 'pho') this.announcePho(() => phoLeave(this.pho, p.id));
@@ -97,25 +113,56 @@ export class Tables {
       last: this.chessLast,
       status: c.isCheckmate() ? 'checkmate' : c.isStalemate() ? 'stalemate' : c.isDraw() ? 'draw' : 'playing',
       you: s.seat === WHITE_SEAT ? 'w' : s.seat === BLACK_SEAT ? 'b' : null,
+      bot: this.chessBot(),
     };
+  }
+
+  /** The side the Claude character is playing, if it is sitting in a player's seat. */
+  private chessBot(): 'w' | 'b' | null {
+    const seat = this.io.sitters().find((x) => x.id === NPC_ID)?.seat;
+    return seat === WHITE_SEAT ? 'w' : seat === BLACK_SEAT ? 'b' : null;
+  }
+
+  /** A few words from Claude after its own move or yours. */
+  private chessTalk(san: string, byBot: boolean, opponent: string) {
+    const c = this.chess;
+    if (c.isCheckmate()) {
+      this.io.botSay(byBot ? 'Checkmate! Good game. Press "New game" if you want revenge.' : `Checkmate. Well played, ${opponent}, you got me. "New game" for a rematch?`);
+      this.io.botEmote(byBot ? 'dance' : '👏');
+    } else if (c.isDraw() || c.isStalemate()) {
+      this.io.botSay("That's a draw. Good game.");
+    } else if (byBot && san.includes('+') && Math.random() < 0.6) {
+      this.io.botSay(pick(['Check.', 'Check!', 'Mind your king.']));
+    } else if (byBot && san.includes('x') && Math.random() < 0.2) {
+      this.io.botSay(pick(['I will take that, thank you.', 'Yoink.', 'That one was loose.']));
+    } else if (!byBot && san.includes('x') && /[QR]|=Q/.test(san) === false && Math.random() < 0.12) {
+      this.io.botSay(pick(['Ouch.', 'I needed that.', 'Fair enough.']));
+    }
   }
 
   private chessAction(p: Sitter, a: Record<string, unknown>) {
     const side = p.seat === WHITE_SEAT ? 'w' : p.seat === BLACK_SEAT ? 'b' : null;
     if (!side) return; // watchers can't touch the board
+    const bot = this.chessBot();
     if (a.k === 'new') {
       this.chess = new Chess();
       this.chessLast = null;
-    } else if (a.k === 'move' && typeof a.from === 'string' && typeof a.to === 'string') {
-      if (this.chess.turn() !== side || this.chess.isGameOver()) return;
+      if (bot) this.io.botSay(bot === 'b' ? `New game. Your move, ${p.name}.` : 'New game. I will start.');
+    } else if ((a.k === 'move' || a.k === 'bot') && typeof a.from === 'string' && typeof a.to === 'string') {
+      // "bot" is Claude's move, sent by the person playing against it; it only counts on Claude's turn.
+      const mover = a.k === 'bot' ? bot : side;
+      if (!mover || (a.k === 'bot' && bot === side)) return;
+      if (this.chess.turn() !== mover || this.chess.isGameOver()) return;
+      let san: string;
       try {
         // Pawns reaching the last rank become queens.
-        this.chess.move({ from: a.from, to: a.to, promotion: 'q' });
+        san = this.chess.move({ from: a.from, to: a.to, promotion: 'q' }).san;
       } catch {
         return; // not a legal move
       }
       this.chessLast = { from: a.from, to: a.to };
-      if (this.chess.isCheckmate()) this.io.notice(`${p.name} won at chess by checkmate`);
+      if (this.chess.isCheckmate()) this.io.notice(`${a.k === 'bot' ? 'Claude' : p.name} won at chess by checkmate`);
+      if (bot) this.chessTalk(san, a.k === 'bot', p.name);
     } else {
       return;
     }

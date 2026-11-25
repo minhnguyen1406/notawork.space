@@ -1,4 +1,5 @@
-import { EMOTES, workWord } from '../../shared/fun';
+import { EMOTES, NPC_ID, workWord } from '../../shared/fun';
+import { Npc } from './npc';
 import { DurableObject } from 'cloudflare:workers';
 import {
   COLORS,
@@ -68,12 +69,45 @@ export class Room extends DurableObject<Env> {
   private ticks = 0;
   private games: GamesState = { ball: centreBall(), score: [0, 0], laps: [] };
   private lastKicker = '';
+  /** The built-in Claude character: always in the room, does what people ask in chat. */
+  private npc = new Npc({
+    people: () => [...this.players.values()].map(publicInfo),
+    seatTaken: (seat) => this.everyone().some((p) => p.seat === seat),
+    say: (text) => this.npcSay(text),
+    emote: (k) => this.broadcast({ t: 'emote', id: NPC_ID, k }),
+    sit: (seat) => this.npcSit(seat),
+    present: (here) => this.broadcast(here ? { t: 'join', player: this.npc.info } : { t: 'leave', id: NPC_ID }),
+  });
+  /** Claude's chat lines go out a moment apart, so they read as speech rather than a burst. */
+  private npcLines: string[] = [];
+  private npcSay(text: string) {
+    this.npcLines.push(text.slice(0, MAX_CHAT));
+  }
+  private npcSit(seat: string | null) {
+    const me = this.npc.info;
+    const before = me.seat;
+    if (seat) {
+      const s = SEATS.find((x) => x.id === seat);
+      if (!s || this.everyone().some((p) => p.seat === seat)) return;
+      Object.assign(me, { seat, x: s.x, z: s.z, ry: s.ry });
+      this.moved = true;
+    } else me.seat = null;
+    this.broadcast({ t: 'sit', id: NPC_ID, seat: me.seat });
+    this.tables.seatChanged(me, before);
+  }
+  /** Real players plus the Claude character, for anything that asks "who is where". */
+  private everyone(): PlayerInfo[] {
+    return this.npc.here ? [...this.players.values(), this.npc.info] : [...this.players.values()];
+  }
+
   private tables = new Tables({
-    sitters: () => [...this.players.values()],
+    sitters: () => this.everyone(),
     send: (id, table, view) => {
       for (const p of this.players.values()) if (p.id === id) this.send(p.ws, { t: 'table', table, view });
     },
     notice: (text) => this.broadcast({ t: 'notice', text }),
+    botSay: (text) => this.npcSay(text),
+    botEmote: (k) => this.broadcast({ t: 'emote', id: NPC_ID, k }),
   });
   private wheelBusyUntil = 0;
   private board: Board = { news: [], stocks: [], at: 0 };
@@ -156,6 +190,10 @@ export class Room extends DurableObject<Env> {
     if (this.players.size === 0 && this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+      // Nobody left: Claude gets up and goes back to the fire for next time.
+      if (this.npc.info.seat) this.npcSit(null);
+      this.npc.reset();
+      this.npcLines.length = 0;
     }
   }
 
@@ -179,9 +217,13 @@ export class Room extends DurableObject<Env> {
   private tick() {
     this.ticks++;
     this.tickBall();
+    if (this.npc.tick(1 / TICK_HZ)) this.moved = true;
+    if (this.npcLines.length && this.ticks % 8 === 0) {
+      this.broadcast({ t: 'chat', id: NPC_ID, name: this.npc.info.name, text: this.npcLines.shift()! });
+    }
     if (this.moved) {
       this.moved = false;
-      this.broadcast({ t: 'state', players: [...this.players.values()].map((p) => [p.id, p.x, p.z, p.ry]) });
+      this.broadcast({ t: 'state', players: this.everyone().map((p) => [p.id, p.x, p.z, p.ry]) });
     }
     // Every few seconds, clear out anyone whose connection died without saying so.
     if (this.ticks % (TICK_HZ * 5) === 0) {
@@ -222,6 +264,7 @@ export class Room extends DurableObject<Env> {
         if (!text || me.lastSeen - me.lastChat < 300) return; // light spam guard
         me.lastChat = me.lastSeen;
         this.broadcast({ t: 'chat', id: me.id, name: me.name, text });
+        this.npc.hears(publicInfo(me), text);
         const word = workWord(text);
         if (word) {
           this.work = { at: Date.now(), by: me.name };
@@ -248,7 +291,7 @@ export class Room extends DurableObject<Env> {
         } else {
           const seat = SEATS.find((s) => s.id === msg.seat);
           if (!seat) return;
-          for (const p of this.players.values()) if (p.seat === seat.id) return; // taken
+          if (this.everyone().some((p) => p.seat === seat.id)) return; // taken
           me.seat = seat.id;
           me.x = seat.x;
           me.z = seat.z;
@@ -397,7 +440,7 @@ export class Room extends DurableObject<Env> {
     this.send(ws, {
       t: 'welcome',
       id: me.id,
-      players: [...this.players.values()].map(publicInfo),
+      players: this.everyone().map(publicInfo),
       kitchen: this.kitchen,
       board: this.board,
       games: this.games,
@@ -406,11 +449,12 @@ export class Room extends DurableObject<Env> {
     });
     this.refreshBoard();
     this.broadcast({ t: 'join', player: publicInfo(me) }, ws);
+    this.npc.greet(me.name, Date.now());
     this.timer ??= setInterval(() => this.tick(), 1000 / TICK_HZ);
   }
 }
 
-const publicInfo = ({ id, name, color, x, z, ry, seat }: Player): PlayerInfo => ({ id, name, color, x, z, ry, seat });
+const publicInfo = ({ id, name, color, x, z, ry, seat }: PlayerInfo): PlayerInfo => ({ id, name, color, x, z, ry, seat });
 
 // --- LiveKit access token: a short-lived HS256 JWT, signed here so the secret never reaches browsers.
 

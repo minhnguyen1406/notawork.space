@@ -16,9 +16,15 @@ export interface ChessView {
   status: 'playing' | 'checkmate' | 'stalemate' | 'draw';
   /** Which side you play, or null if you're watching. */
   you: 'w' | 'b' | null;
+  /** The side played by the built-in Claude character, if it is at the board. */
+  bot: 'w' | 'b' | null;
 }
 
-export type ChessAction = { k: 'move'; from: string; to: string } | { k: 'new' };
+export type ChessAction =
+  | { k: 'move'; from: string; to: string }
+  | { k: 'new' }
+  /** A move for the Claude character, worked out in its opponent's browser so the server stays free. */
+  | { k: 'bot'; from: string; to: string };
 
 export interface CardsView {
   phase: 'lobby' | 'play' | 'over';

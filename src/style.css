@@ -446,7 +446,7 @@ button.primary {
 .chess-board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  width: min(100%, 62vh, 560px);
+  width: min(100%, 54vh, 560px);
   aspect-ratio: 1;
   border: 6px solid #3a2a22;
   border-radius: 8px;
@@ -1047,4 +1047,12 @@ kbd {
 /* Your own camera in the face grid, shown as in a mirror */
 .tile video.mirror {
   transform: scaleX(-1);
+}
+
+/* Chat while seated at a table or by the fire: a solid panel so it reads over the faces behind it */
+#chat.over-panel {
+  background: rgba(15, 11, 20, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px;
 }

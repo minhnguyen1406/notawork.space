@@ -1,3 +1,4 @@
+import type { ChessView } from '../shared/tables';
 import * as THREE from 'three';
 import { sceneColliders, showColliders } from './collide';
 import { confetti, flash, play } from './fun';
@@ -229,6 +230,8 @@ function renderGrid() {
 
   const group = myGridGroup();
   gridEl.hidden = !group;
+  // Chat sits on top of the sit-down panel, so give it a solid backing there to stay readable.
+  $('chat').classList.toggle('over-panel', !!group);
   // At a game table the game takes the main area and faces move to a side column.
   gridEl.classList.toggle('game', isTable(group));
   if (isTable(group)) tableUI.show(group, tableViews.get(group));
@@ -409,6 +412,25 @@ for (const b of [btnMic, btnCam, btnShare]) b.hidden = true;
 
 let lastScoreTotal = 0;
 
+// Playing chess against the built-in Claude character: its moves are worked out here, in the
+// browser of whoever is sitting opposite, and sent to the server (which checks they are legal).
+let chessBrain: Worker | null = null;
+let thinkingAbout = '';
+function thinkForClaude(v: ChessView) {
+  const turn = v.fen.split(' ')[1];
+  if (!v.bot || !v.you || v.you === v.bot || v.status !== 'playing' || turn !== v.bot || thinkingAbout === v.fen) return;
+  thinkingAbout = v.fen;
+  const asked = performance.now();
+  chessBrain ??= new Worker(new URL('./chess-worker.ts', import.meta.url), { type: 'module' });
+  chessBrain.onmessage = (e: MessageEvent<{ fen: string; move: { from: string; to: string } | null }>) => {
+    const { fen, move } = e.data;
+    if (!move || fen !== thinkingAbout) return;
+    // Never instant: a short pause reads as thought.
+    window.setTimeout(() => send({ t: 'game', table: 'chess', a: { k: 'bot', from: move.from, to: move.to } }), Math.max(0, 900 - (performance.now() - asked)));
+  };
+  chessBrain.postMessage({ fen: v.fen });
+}
+
 function handle(msg: ServerMsg) {
   switch (msg.t) {
     case 'welcome': {
@@ -508,6 +530,7 @@ function handle(msg: ServerMsg) {
       break;
     case 'table':
       tableViews.set(msg.table, msg.view);
+      if (msg.table === 'chess') thinkForClaude(msg.view as ChessView);
       if (myGridGroup() === msg.table && isTable(msg.table)) tableUI.show(msg.table, msg.view);
       break;
     case 'ball':
@@ -1035,6 +1058,7 @@ if (import.meta.env.DEV) {
     ball: () => ({ ...games.ball }),
     id: () => myId,
     dropRoom: () => ws?.close(),
+    table: (id: string) => tableViews.get(id) ?? null,
     where: (id: string) => {
       const a = avatars.get(id);
       return a ? [a.x, a.z] : null;

@@ -147,7 +147,7 @@ check('voice reconnects too', await until(async () => (await a.evaluate(() => wi
 const newId = await a.evaluate(() => window.__debug.id());
 check('the other player sees you back, once', await until(async () => { const w = await b.evaluate((id) => window.__debug.where(id), newId); return !!w && Math.hypot(w[0] - before[0], w[1] - before[1]) < 1; }));
 check('and your old self is gone for them', (await b.evaluate((id) => window.__debug.where(id), oldId)) === null);
-check('the room count is right for both', (await a.$eval('#online', (e) => e.textContent)) === '2 here' && (await b.$eval('#online', (e) => e.textContent)) === '2 here');
+check('the room count is right for both', (await a.$eval('#online', (e) => e.textContent)) === '3 here' && (await b.$eval('#online', (e) => e.textContent)) === '3 here'); // two people and Claude
 await hold('KeyS', 600);
 check('and you can walk again', (await a.pos())[1] > after[1] + 1);
 

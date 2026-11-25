@@ -17,3 +17,6 @@ const WORK_RE = new RegExp(`(?<![\\p{L}\\p{N}])(${WORK_WORDS.map(escape).join('|
 
 /** The work word in a chat message, or null if it is clean. */
 export const workWord = (text: string): string | null => WORK_RE.exec(text)?.[1].toLowerCase() ?? null;
+
+/** The id of the built-in Claude character. Real players get random ids, so it can't clash. */
+export const NPC_ID = 'claude';
