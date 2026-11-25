@@ -53,6 +53,9 @@ function signBoard(tex: THREE.Texture, w: number, h: number, x: number, y: numbe
 }
 
 /** The football pitch, the lap race and the wheel. Draws what the server says and animates in between. */
+/** Width of the way in through the boards on each long side of the pitch. */
+const PITCH_GATE = 3.4;
+
 export class Games {
   /** The ball as this browser currently believes it to be. */
   readonly ball: BallState = centreBall();
@@ -114,13 +117,22 @@ export class Games {
     for (const z of [P.z1 + 0.07, P.z2 - 0.07]) flat(new THREE.PlaneGeometry(w, 0.14), line, P.cx, z, 0.03);
     for (const x of [P.x1 + 0.07, P.x2 - 0.07]) flat(new THREE.PlaneGeometry(0.14, d), line, x, P.cz, 0.03);
 
-    // Low boards all round, open at the two goal mouths.
+    // Boards all round, tall enough to be solid. You get in through a gate in the middle of each
+    // long side, or through the goal mouths.
     const board = '#e9e2d2';
-    for (const z of [P.z1 - 0.15, P.z2 + 0.15]) scene.add(box(w + 0.6, 0.5, 0.3, board, P.cx, 0.25, z));
+    const BOARD_H = 0.95;
+    const sideLen = (w + 0.6 - PITCH_GATE) / 2;
+    for (const z of [P.z1 - 0.15, P.z2 + 0.15]) {
+      for (const side of [-1, 1]) {
+        scene.add(box(sideLen, BOARD_H, 0.3, board, P.cx + side * (PITCH_GATE / 2 + sideLen / 2), BOARD_H / 2, z));
+        // Gate posts, so the opening reads as a way in.
+        scene.add(box(0.36, BOARD_H + 0.35, 0.36, '#e4572e', P.cx + side * (PITCH_GATE / 2 + 0.18), (BOARD_H + 0.35) / 2, z));
+      }
+    }
     const endLen = d / 2 - GOAL_HALF;
     for (const x of [P.x1 - 0.15, P.x2 + 0.15]) {
-      scene.add(box(0.3, 0.5, endLen, board, x, 0.25, P.z1 + endLen / 2));
-      scene.add(box(0.3, 0.5, endLen, board, x, 0.25, P.z2 - endLen / 2));
+      scene.add(box(0.3, BOARD_H, endLen, board, x, BOARD_H / 2, P.z1 + endLen / 2));
+      scene.add(box(0.3, BOARD_H, endLen, board, x, BOARD_H / 2, P.z2 - endLen / 2));
     }
 
     // Goals: Red defends the west end, Blue the east.

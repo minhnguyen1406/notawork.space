@@ -80,8 +80,11 @@ composer.addPass(new RenderPass(world.scene, camera));
 composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.7, 1.0));
 composer.addPass(new OutputPass());
 
+/** How many real pixels are drawn per screen pixel. Lowered automatically on slow machines (see adaptQuality). */
+let scale = Math.min(devicePixelRatio, 2);
+
 function resize() {
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setPixelRatio(scale);
   renderer.setSize(innerWidth, innerHeight, false);
   composer.setPixelRatio(renderer.getPixelRatio());
   composer.setSize(innerWidth, innerHeight);
@@ -102,9 +105,13 @@ let media: Media | null = null;
 let speaking = new Set<string>();
 
 const keys = new Set<string>();
+// What the camera is doing now, and (the "want" values) where your dragging and scrolling have asked it to be.
 let camYaw = 0;
 let camPitch = 0.42;
 let camDist = 12;
+let wantYaw = camYaw;
+let wantPitch = camPitch;
+let wantDist = camDist;
 let shownDist = 12;
 const camFocus = new THREE.Vector3(0, 1.6, 13);
 
@@ -291,7 +298,12 @@ function refreshMediaButtons() {
   btnShare.classList.toggle('on', media.sharingMyScreen);
 }
 
+// Bumped whenever the room connection is replaced, so a voice connection still starting for the
+// old one can tell it is no longer wanted.
+let mediaRound = 0;
+
 async function startMedia(url: string, token: string) {
+  const round = ++mediaRound;
   const m = new Media(myId, {
     camera(id, el) {
       if (el) cams.set(id, el);
@@ -320,6 +332,10 @@ async function startMedia(url: string, token: string) {
   });
   try {
     await m.connect(url, token);
+    if (round !== mediaRound) {
+      void m.close();
+      return;
+    }
     media = m;
     for (const b of [btnMic, btnCam, btnShare]) b.hidden = false;
   } catch (err) {
@@ -409,13 +425,27 @@ function handle(msg: ServerMsg) {
       renderMenu();
       $('join').hidden = true;
       $('hud').hidden = false;
-      logLine('You came in. Press Enter to chat, H for the guide.');
+      everJoined = true;
+      retries = 0;
+      if (backTo) {
+        // Reconnected: put me back where I was standing.
+        me.place(backTo.x, backTo.z, backTo.ry);
+        camFocus.set(me.x, 1.6, me.z);
+        sent.x = sent.z = sent.ry = Infinity;
+        backTo = null;
+        toastEl.hidden = true;
+        logLine('Back in the room.');
+      } else logLine('You came in. Press Enter to chat, H for the guide.');
       if (msg.media) void startMedia(msg.media.url, msg.media.token);
       else logLine('Voice and video are not set up on this server yet.');
       break;
     }
     case 'denied':
-      joinFailed(msg.reason === 'password' ? 'That password is not right.' : 'The room is full right now.');
+      if (everJoined) {
+        // Refused while reconnecting: nothing more to try automatically.
+        everJoined = false;
+        toast(msg.reason === 'password' ? 'The room password has changed. Reload the page.' : 'The room filled up while you were away. Reload to try again.', true);
+      } else joinFailed(msg.reason === 'password' ? 'That password is not right.' : 'The room is full right now.');
       break;
     case 'join':
       addAvatar(msg.player);
@@ -551,9 +581,21 @@ joinForm.onsubmit = (e) => {
   joinError.hidden = true;
   joinButton.disabled = true;
 
+  joinName = name;
+  connect();
+};
+
+let joinName = '';
+/** True once I have been in the room, so a dropped connection means "reconnect", not "couldn't join". */
+let everJoined = false;
+let retries = 0;
+/** Where I was standing when the connection dropped. */
+let backTo: { x: number; z: number; ry: number } | null = null;
+
+function connect() {
   const socket = new WebSocket(wsUrl);
   ws = socket;
-  socket.onopen = () => send({ t: 'join', name, color, password: passwordInput.value || undefined });
+  socket.onopen = () => send({ t: 'join', name: joinName, color, password: passwordInput.value || undefined });
   socket.onmessage = (ev) => {
     try {
       handle(JSON.parse(ev.data as string));
@@ -562,10 +604,43 @@ joinForm.onsubmit = (e) => {
     }
   };
   socket.onclose = () => {
-    if (me) toast('Connection lost. Reload the page to come back in.', true);
+    if (ws !== socket) return;
+    if (everJoined) lostRoom();
     else if (joinError.hidden) joinFailed('Could not reach the room. Try again in a moment.');
   };
-};
+}
+
+/**
+ * The room connection dropped (wifi blip, laptop sleep, server restart). Clear out what belonged to
+ * it and keep trying to get back in; you return as a new arrival standing where you were.
+ */
+function lostRoom() {
+  if (me) backTo = { x: me.x, z: me.z, ry: me.ry };
+  me = null;
+  myId = '';
+  for (const id of [...avatars.keys()]) removeAvatar(id);
+  cams.clear();
+  tableViews.clear();
+  mediaRound++;
+  const old = media;
+  media = null;
+  void old?.close();
+  micLatched = talkHeld = false;
+  btnMic.textContent = 'Mic off · hold V';
+  btnMic.classList.remove('on');
+  btnCam.textContent = 'Camera off';
+  btnCam.classList.remove('on');
+  for (const b of [btnMic, btnCam, btnShare, btnTheater]) b.hidden = true;
+  world.setScreenVideo(null);
+  closeTheater();
+  renderGrid();
+  keys.clear();
+  velX = velZ = 0;
+  const wait = Math.min(10_000, 1000 * 2 ** Math.min(retries, 4));
+  retries++;
+  toast(retries > 1 ? `Still reconnecting… (try ${retries})` : 'Connection lost. Reconnecting…', true);
+  window.setTimeout(connect, wait);
+}
 
 // ---------------------------------------------------------------- input
 
@@ -732,7 +807,7 @@ async function refreshInfo() {
     `Version: ${__BUILD__}`,
     `Browser: ${navigator.userAgent.match(/(Firefox|Edg|OPR|Chrome|Safari)\/[\d.]+/)?.[0].replace('Edg', 'Edge') ?? navigator.userAgent}`,
     `Room connection: ${ws?.readyState === WebSocket.OPEN ? 'open' : 'CLOSED'} · ${avatars.size} here`,
-    `3D picture: ${Math.round(fps)} fps`,
+    `3D picture: ${Math.round(fps)} fps at ${Math.round((scale / MAX_SCALE) * 100)}% sharpness`,
     ...(media ? await media.info() : ['Voice connection: not connected']),
   ];
   infoEl.textContent = lines.join('\n');
@@ -809,14 +884,14 @@ canvas.addEventListener('pointerup', () => (dragging = false));
 canvas.addEventListener('pointercancel', () => (dragging = false));
 canvas.addEventListener('pointermove', (e) => {
   if (!dragging) return;
-  camYaw -= e.movementX * 0.005;
-  camPitch = Math.max(0.12, Math.min(1.35, camPitch + e.movementY * 0.004));
+  wantYaw -= e.movementX * 0.005;
+  wantPitch = Math.max(0.12, Math.min(1.35, wantPitch + e.movementY * 0.004));
 });
 canvas.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault();
-    camDist = Math.max(4, Math.min(26, camDist + e.deltaY * 0.012));
+    wantDist = Math.max(4, Math.min(26, wantDist + e.deltaY * 0.012));
   },
   { passive: false },
 );
@@ -874,6 +949,9 @@ const turnToward = (from: number, to: number, k: number) => {
 };
 
 let askedToStand = false;
+// My current velocity, in metres a second.
+let velX = 0;
+let velZ = 0;
 
 function moveMe(dt: number) {
   if (!me) return;
@@ -891,22 +969,42 @@ function moveMe(dt: number) {
     return;
   }
   askedToStand = false;
-  me.walking = moving;
-  if (!moving) return;
 
-  // Forward is "away from the camera".
-  let dx = -Math.sin(camYaw) * f + Math.cos(camYaw) * r;
-  let dz = -Math.cos(camYaw) * f - Math.sin(camYaw) * r;
-  const len = Math.hypot(dx, dz);
-  dx /= len;
-  dz /= len;
+  // Where the keys point. Forward is "away from the camera".
+  let dx = 0;
+  let dz = 0;
+  if (moving) {
+    dx = -Math.sin(camYaw) * f + Math.cos(camYaw) * r;
+    dz = -Math.cos(camYaw) * f - Math.sin(camYaw) * r;
+    const len = Math.hypot(dx, dz);
+    dx /= len;
+    dz /= len;
+  }
   const running = keys.has('ShiftLeft') || keys.has('ShiftRight');
-  const step = (running ? RUN : WALK) * dt;
-  const nx = Math.max(BOUNDS.x1 + EDGE, Math.min(BOUNDS.x2 - EDGE, me.x + dx * step));
-  const nz = Math.max(BOUNDS.z1 + EDGE, Math.min(BOUNDS.z2 - EDGE, me.z + dz * step));
+  const speed = moving ? (running ? RUN : WALK) : 0;
+  // Ease towards that speed instead of jumping to it: a quick lean in, a slightly quicker stop.
+  const ease = 1 - Math.exp(-(moving ? 13 : 17) * dt);
+  velX += (dx * speed - velX) * ease;
+  velZ += (dz * speed - velZ) * ease;
+  const pace = Math.hypot(velX, velZ);
+  if (pace < 0.08) {
+    velX = velZ = 0;
+    me.walking = false;
+    return;
+  }
+  me.walking = true;
+  const nx = Math.max(BOUNDS.x1 + EDGE, Math.min(BOUNDS.x2 - EDGE, me.x + velX * dt));
+  const nz = Math.max(BOUNDS.z1 + EDGE, Math.min(BOUNDS.z2 - EDGE, me.z + velZ * dt));
+  // Blocked one way, you slide along the other.
   if (!blocked(nx, me.z, me.x, me.z)) me.x = nx;
+  else velX = 0;
   if (!blocked(me.x, nz, me.x, me.z)) me.z = nz;
-  me.ry = turnToward(me.ry, Math.atan2(dx, dz), Math.min(1, dt * 14));
+  else velZ = 0;
+  if (moving) me.ry = turnToward(me.ry, Math.atan2(dx, dz), Math.min(1, dt * 14));
+  if (!moving) {
+    dx = velX / pace;
+    dz = velZ / pace;
+  }
 
   // Football: walking into the ball kicks it, mostly away from you and a little the way you're heading.
   const ball = games.ball;
@@ -936,12 +1034,17 @@ if (import.meta.env.DEV) {
     pos: () => (me ? [me.x, me.z] : null),
     ball: () => ({ ...games.ball }),
     id: () => myId,
+    dropRoom: () => ws?.close(),
+    where: (id: string) => {
+      const a = avatars.get(id);
+      return a ? [a.x, a.z] : null;
+    },
     solid: () => solid,
     showSolid: () => showColliders(world.scene, solid),
     cam: (yaw: number, pitch: number, dist: number) => {
-      camYaw = yaw;
-      camPitch = pitch;
-      camDist = dist;
+      camYaw = wantYaw = yaw;
+      camPitch = wantPitch = pitch;
+      camDist = wantDist = dist;
     },
     media: () => media?.debug() ?? null,
     cams: () => Object.fromEntries([...cams].map(([id, el]) => [id, el.videoWidth])),
@@ -960,12 +1063,49 @@ let sendClock = 0;
 let nearClock = 0;
 let pingClock = 0;
 let last = performance.now();
+let lastFrameAt = last;
+
+// Smoothness first: if this machine can't keep up, render fewer pixels (a slightly softer picture)
+// rather than drop frames, and sharpen again when there is room to spare.
+const MAX_SCALE = Math.min(devicePixelRatio, 2);
+const MIN_SCALE = Math.min(0.7, MAX_SCALE);
+let slowFor = 0;
+let fastFor = 0;
+let settleUntil = 0;
+function setScale(next: number) {
+  scale = next;
+  renderer.setPixelRatio(scale);
+  renderer.setSize(innerWidth, innerHeight, false);
+  composer.setPixelRatio(scale);
+  composer.setSize(innerWidth, innerHeight);
+}
+function adaptQuality(frameMs: number) {
+  if (document.hidden || frameMs > 250 || performance.now() < settleUntil) return; // ignore tab switches and hitches
+  slowFor = frameMs > 21 ? slowFor + frameMs : Math.max(0, slowFor - frameMs * 2);
+  fastFor = frameMs < 17.5 ? fastFor + frameMs : 0;
+  if (slowFor > 1200 && scale > MIN_SCALE) {
+    setScale(Math.max(MIN_SCALE, scale - 0.25));
+    slowFor = fastFor = 0;
+    settleUntil = performance.now() + 1500;
+  } else if (fastFor > 12_000 && scale < MAX_SCALE) {
+    setScale(Math.min(MAX_SCALE, scale + 0.25));
+    slowFor = fastFor = 0;
+    settleUntil = performance.now() + 1500;
+  }
+}
 
 function frame(nowMs: number) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (nowMs - last) / 1000);
   last = nowMs;
   const time = nowMs / 1000;
+
+  const glide = 1 - Math.exp(-16 * dt);
+  camYaw += (wantYaw - camYaw) * glide;
+  camPitch += (wantPitch - camPitch) * glide;
+  camDist += (wantDist - camDist) * glide;
+  adaptQuality(nowMs - lastFrameAt);
+  lastFrameAt = nowMs;
 
   moveMe(dt);
   tickRace();

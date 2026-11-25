@@ -125,7 +125,9 @@ export class Media {
         this.quality.delete(p.identity);
         this.hooks.changed();
       })
-      .on(RoomEvent.Disconnected, () => this.hooks.lost())
+      .on(RoomEvent.Disconnected, () => {
+        if (!this.closing) this.hooks.lost();
+      })
       .on(RoomEvent.ActiveSpeakersChanged, (speakers) => this.hooks.speaking(new Set(speakers.map((s) => s.identity))));
 
     await r.connect(url, token, { autoSubscribe: false });
@@ -219,6 +221,20 @@ export class Media {
   }
   get sharingMyScreen() {
     return this.screenOwner === this.myId;
+  }
+
+  private closing = false;
+
+  /** Leave voice on purpose (the room is reconnecting and will hand out a fresh pass). */
+  async close() {
+    this.closing = true;
+    for (const el of this.voices.values()) el.remove();
+    this.voices.clear();
+    this.screenAudio?.remove();
+    this.screenAudio = null;
+    this.screenOwner = null;
+    for (const el of [...this.extra.keys()]) this.release(el);
+    await this.room.disconnect().catch(() => {});
   }
 
   private lastFrames = { at: 0, n: 0 };

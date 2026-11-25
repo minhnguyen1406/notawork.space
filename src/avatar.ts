@@ -60,6 +60,9 @@ export function disposeSprite(s: THREE.Sprite) {
   s.material.dispose();
 }
 
+/** How far in the past other people are shown, so there are always two known positions to glide between. */
+const PLAYBACK_DELAY_MS = 130;
+
 const lerpAngle = (a: number, b: number, k: number) => {
   const d = ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
   return a + d * k;
@@ -146,10 +149,15 @@ export class Avatar {
     this.group.rotation.y = this.ry;
   }
 
+  /** Recent positions from the server, oldest first, for smooth playback. */
+  private path: { t: number; x: number; z: number; ry: number }[] = [];
+
   setTarget(x: number, z: number, ry: number) {
     this.tx = x;
     this.tz = z;
     this.try_ = ry;
+    this.path.push({ t: performance.now(), x, z, ry });
+    if (this.path.length > 12) this.path.shift();
   }
 
   /** Jump straight to a spot (used when sitting down). */
@@ -157,6 +165,7 @@ export class Avatar {
     this.x = this.tx = x;
     this.z = this.tz = z;
     this.ry = this.try_ = ry;
+    this.path.length = 0;
   }
 
   private videoTime = -1;
@@ -232,13 +241,31 @@ export class Avatar {
 
   update(dt: number, camera: THREE.Camera) {
     if (!this.local) {
-      const k = 1 - Math.exp(-10 * dt);
-      const dx = this.tx - this.x;
-      const dz = this.tz - this.z;
-      this.walking = !this.seat && Math.hypot(dx, dz) > 0.04;
+      // Positions arrive ten times a second. Rather than chase the newest one (which lurches),
+      // show where they were a moment ago and glide between the two positions either side of that.
+      const at = performance.now() - PLAYBACK_DELAY_MS;
+      const p = this.path;
+      let goalX = this.tx;
+      let goalZ = this.tz;
+      let goalRy = this.try_;
+      for (let i = p.length - 1; i > 0; i--) {
+        if (p[i - 1].t <= at && at <= p[i].t) {
+          const k = (at - p[i - 1].t) / Math.max(1, p[i].t - p[i - 1].t);
+          goalX = p[i - 1].x + (p[i].x - p[i - 1].x) * k;
+          goalZ = p[i - 1].z + (p[i].z - p[i - 1].z) * k;
+          goalRy = lerpAngle(p[i - 1].ry, p[i].ry, k);
+          break;
+        }
+      }
+      const dx = goalX - this.x;
+      const dz = goalZ - this.z;
+      const far = Math.hypot(dx, dz);
+      // A light touch of easing hides the joins; a big gap (a teleport, a long pause) just snaps.
+      const k = far > 6 ? 1 : 1 - Math.exp(-22 * dt);
+      this.walking = !this.seat && Math.hypot(this.tx - this.x, this.tz - this.z) > 0.06;
       this.x += dx * k;
       this.z += dz * k;
-      this.ry = lerpAngle(this.ry, this.try_, k);
+      this.ry = lerpAngle(this.ry, goalRy, 1 - Math.exp(-14 * dt));
     }
     this.group.position.set(this.x, 0, this.z);
     this.group.rotation.y = this.ry;
