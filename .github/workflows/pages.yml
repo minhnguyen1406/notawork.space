@@ -26,9 +26,9 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          # Address of the game server (the Cloudflare Worker). Set it under
-          # Settings → Secrets and variables → Actions → Variables.
-          VITE_SERVER_URL: ${{ vars.SERVER_URL }}
+          # Address of the game server (the Cloudflare Worker). It is public, not a secret.
+          # Override it with a SERVER_URL variable under Settings → Secrets and variables → Actions.
+          VITE_SERVER_URL: ${{ vars.SERVER_URL || 'https://notawork-space.notawork-space.workers.dev' }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
