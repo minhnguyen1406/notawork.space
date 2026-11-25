@@ -43,7 +43,13 @@ export function bestMove(fen, { ms = 2000, maxDepth = 4 } = {}) {
   const deadline = Date.now() + ms;
   let nodes = 0;
 
+  // Checked often: move generation is slow enough that a coarser check overruns the clock badly.
+  const tick = () => {
+    if ((++nodes & 15) === 0 && Date.now() > deadline) throw new OutOfTime();
+  };
+
   const quiet = (alpha, beta, left) => {
+    tick();
     const stand = evaluate(chess);
     if (left === 0 || stand >= beta) return stand;
     if (stand > alpha) alpha = stand;
@@ -58,7 +64,7 @@ export function bestMove(fen, { ms = 2000, maxDepth = 4 } = {}) {
   };
 
   const search = (depth, alpha, beta, ply) => {
-    if ((++nodes & 255) === 0 && Date.now() > deadline) throw new OutOfTime();
+    tick();
     if (chess.isCheckmate()) return -MATE + ply;
     if (chess.isDraw() || chess.isStalemate()) return 0;
     if (depth === 0) return quiet(alpha, beta, 3);

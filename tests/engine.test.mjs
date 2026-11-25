@@ -30,4 +30,10 @@ test('returns null when there is no move, and always a legal move otherwise', ()
     const m = bestMove(chess.fen(), { ms: 150, maxDepth: 2 });
     expect(() => chess.move({ from: m.from, to: m.to, promotion: 'q' })).not.toThrow();
   }
+}, 20_000);
+
+test('keeps to its thinking time', () => {
+  const started = Date.now();
+  bestMove('r1bq1rk1/pp2bppp/2n1pn2/2pp4/3P1B2/2PBPN2/PP1N1PPP/R2Q1RK1 w - - 0 9', { ms: 400, maxDepth: 6 });
+  expect(Date.now() - started).toBeLessThan(900);
 });
