@@ -167,18 +167,30 @@ export class Avatar {
     this.group.add(ring);
     this.footRing = ring;
 
-    // Shown while this person is talking: a speaker over their name (and the ring pulses green).
-    this.talkIcon = emojiSprite('🔊', 0.62);
-    this.talkIcon.position.set(0, 3.42, 0);
-    this.talkIcon.visible = false;
-    this.group.add(this.talkIcon);
+    // Shown while this person is talking: green ripples spreading out from their feet, and their
+    // name tag turns bright green with a speaker on it (see setSpeaking).
+    for (let i = 0; i < 3; i++) {
+      const wave = new THREE.Mesh(
+        new THREE.RingGeometry(0.56, 0.7, 40),
+        new THREE.MeshBasicMaterial({ color: '#5dff6e', transparent: true, opacity: 0, depthWrite: false }),
+      );
+      wave.rotation.x = -Math.PI / 2;
+      wave.position.y = 0.04;
+      wave.visible = false;
+      this.waves.push(wave);
+      this.group.add(wave);
+    }
 
     this.hold.position.set(0, 1.0, 0.62);
     this.inner.add(this.hold);
 
     const label = textSprite(info.name, 0.42);
     label.position.y = 2.72;
-    this.group.add(this.inner, label);
+    this.label = label;
+    this.talkLabel = textSprite(`🔊 ${info.name}`, 0.5, { bg: '#3ee05a', fg: '#062a10' });
+    this.talkLabel.position.y = 2.76;
+    this.talkLabel.visible = false;
+    this.group.add(this.inner, label, this.talkLabel);
     this.group.position.set(this.x, 0, this.z);
     this.group.rotation.y = this.ry;
   }
@@ -203,7 +215,9 @@ export class Avatar {
   }
 
   private footRing!: THREE.Mesh;
-  private talkIcon!: THREE.Sprite;
+  private label!: THREE.Sprite;
+  private talkLabel!: THREE.Sprite;
+  private waves: THREE.Mesh[] = [];
   speaking = false;
   private videoTime = -1;
   /** True if this person's camera bubble is drawn mirrored (only ever your own). */
@@ -274,9 +288,10 @@ export class Avatar {
   /** Mark this person as talking (or not): a speaker icon, a pulsing green ring, and the camera rim. */
   setSpeaking(on: boolean) {
     this.speaking = on;
-    this.talkIcon.visible = on;
-    (this.footRing.material as THREE.MeshBasicMaterial).color.set(on ? '#7dff6a' : this.info.color);
-    if (!on) this.footRing.scale.setScalar(1);
+    this.label.visible = !on;
+    this.talkLabel.visible = on;
+    for (const w of this.waves) w.visible = on;
+    (this.footRing.material as THREE.MeshBasicMaterial).color.set(on ? '#5dff6e' : this.info.color);
     if (this.video) (this.video.ring.material as THREE.MeshBasicMaterial).color.set(on ? '#9be564' : this.info.color);
   }
 
@@ -324,11 +339,12 @@ export class Avatar {
 
     const now = performance.now();
     if (this.speaking) {
-      const beat = 1 + Math.sin(now / 110) * 0.12;
-      this.footRing.scale.setScalar(beat + 0.12);
-      this.talkIcon.scale.setScalar(0.62 * beat);
-      // Sit above the camera bubble if there is one, otherwise just over the name.
-      this.talkIcon.position.y = this.video ? 5.0 : 3.42;
+      // Ripples: each ring grows outwards and fades, one after another.
+      this.waves.forEach((w, i) => {
+        const t = (now / 1100 + i / this.waves.length) % 1;
+        w.scale.setScalar(1 + t * 2.4);
+        (w.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.85;
+      });
     }
     // Dancing: spin, bounce, arms in the air.
     const dancing = now < this.danceUntil && !sitting && !this.walking;

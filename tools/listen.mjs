@@ -38,8 +38,10 @@ await page.evaluate(() => {
     }
   }, 300);
 });
+const shots = process.argv[3]; // optional folder for a picture every five seconds
 for (let t = 0; t < seconds; t += 5) {
   await sleep(5000);
+  if (shots) await page.screenshot({ path: `${shots}/listener-${String(t + 5).padStart(2, '0')}.jpg`, type: 'jpeg', quality: 80 });
   const l = await page.evaluate(() => window.__levels);
   console.log(`+${t + 5}s voices received: ${l.elements}, loudest so far: ${l.peak.toFixed(3)}, playback volume set to: ${l.volume.toFixed(2)}`);
 }
