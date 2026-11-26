@@ -2,7 +2,8 @@
 import { check, done, open, sleep, until } from './lib.mjs';
 
 const a = await open('Ann');
-const shown = (sel) => a.evaluate((s) => { const e = document.querySelector(s); return !!e && e.offsetParent !== null; }, sel);
+// Not offsetParent: that is always null for a position: fixed element, shown or not.
+const shown = (sel) => a.evaluate((s) => { const e = document.querySelector(s); return !!e && e.getClientRects().length > 0; }, sel);
 /** Send a made-up finger event to the middle of `sel`, moved by (dx, dy) as a share of its half-width. */
 const finger = (type, sel, dx = 0, dy = 0, id = 7) =>
   a.evaluate((t, s, x, y, pointerId) => {

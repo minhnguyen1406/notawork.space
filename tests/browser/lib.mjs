@@ -41,10 +41,11 @@ export async function open(name, { media = false } = {}) {
   };
   page.pos = () => page.evaluate(() => window.__debug.pos());
   page.id = () => page.evaluate(() => window.__debug.id());
-  /** The text of an element, or '' if it is missing or hidden. */
-  page.text = (sel) => page.evaluate((s) => { const e = document.querySelector(s); return e && !e.hidden && e.offsetParent !== null ? e.textContent : ''; }, sel);
+  /** The text of an element, or '' if it is missing or hidden. (Judged by whether it has a box:
+   *  offsetParent is always null for position: fixed elements, shown or not.) */
+  page.text = (sel) => page.evaluate((s) => { const e = document.querySelector(s); return e && !e.hidden && e.getClientRects().length > 0 ? e.textContent : ''; }, sel);
   /** Click the first visible button inside `sel` whose text starts with `label`. Returns false if there is none. */
-  page.press = (sel, label) => page.evaluate((s, l) => { const b = [...document.querySelectorAll(`${s} button`)].find((x) => x.textContent.trim().startsWith(l) && !x.disabled && x.offsetParent !== null); if (b) b.click(); return !!b; }, sel, label);
+  page.press = (sel, label) => page.evaluate((s, l) => { const b = [...document.querySelectorAll(`${s} button`)].find((x) => x.textContent.trim().startsWith(l) && !x.disabled && x.getClientRects().length > 0); if (b) b.click(); return !!b; }, sel, label);
   /** Stand at a game's signpost and press E to open it. */
   page.openGame = async (id) => {
     const spot = await page.evaluate(async (g) => (await import('/shared/minigames.ts')).GAME_SPOTS[g], id);

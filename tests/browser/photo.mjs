@@ -6,6 +6,10 @@ import { check, done, open, sleep, until } from './lib.mjs';
 
 const page = await open('Ann');
 const BAR = '.ft-photo-bar';
+// lib's page.text() goes by offsetParent, which is always null for a position: fixed element, so read these directly.
+const text = (sel) => page.evaluate((s) => { const e = document.querySelector(s); return e && e.getClientRects().length > 0 ? e.textContent : ''; }, sel);
+// SHOTS=dir saves pictures of photo mode and of the countdown there.
+const shot = async (name) => { if (process.env.SHOTS) await page.screenshot({ path: join(process.env.SHOTS, name) }); };
 const shown = (sel) => page.evaluate((s) => { const e = document.querySelector(s); return !!e && getComputedStyle(e).display !== 'none' && e.getClientRects().length > 0; }, sel);
 
 // Real downloads go to a folder of our own, and the page also notes every download link it clicks.
@@ -35,7 +39,8 @@ check('the photo bar is hidden to begin with', !(await shown(BAR)));
 await page.keyboard.press('KeyP');
 check('P hides the interface', await until(async () => !(await shown('#hud'))));
 check('and shows the photo bar', await shown(BAR));
-check('with Take photo, the timer and Done', (await page.text(BAR)) === 'Take photo3s timerDone');
+check('with Take photo, the timer and Done', (await text(BAR)) === 'Take photo3s timerDone');
+await shot('photo-mode.png');
 
 // Walking still works with the interface hidden.
 const before = await page.pos();
@@ -71,11 +76,12 @@ check('Enter did not open the chat box', await page.evaluate(() => document.acti
 await page.press(BAR, '3s timer');
 check('the timer button switches on', await page.evaluate(() => document.querySelector('.ft-photo-timer').classList.contains('on')));
 await page.keyboard.press('Space');
-check('a big 3 appears', await until(async () => (await page.text('.ft-photo-count')) === '3', 1000));
+check('a big 3 appears', await until(async () => (await text('.ft-photo-count')) === '3', 1000));
+await shot('photo-count.png');
 check('no photo yet', (await clicked()).length === 3);
-check('it counts down', await until(async () => (await page.text('.ft-photo-count')) === '1', 3000));
+check('it counts down', await until(async () => (await text('.ft-photo-count')) === '1', 3000));
 check('then takes the photo', await until(async () => (await clicked()).length === 4, 3000));
-check('and the number goes away', (await page.text('.ft-photo-count')) === '');
+check('and the number goes away', (await text('.ft-photo-count')) === '');
 
 // Leaving in the middle of a countdown calls it off.
 await page.keyboard.press('Space');

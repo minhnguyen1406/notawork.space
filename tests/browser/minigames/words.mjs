@@ -79,5 +79,5 @@ await until(async () => (await tinted(ann)) === 25);
 check('a new game hides the map from guessers again', (await tinted(chi)) === 0 && (await opened(chi)) === 0);
 
 await chi.press(P, 'Leave');
-check('a team left with one player ends the game', await until(async () => (await dan.text(`${P} .mg-words-result`)).includes('ran short')));
+check('a team left with one player ends the game', await until(async () => (await dan.text(`${P} .mg-words-result`)).includes('stopped early')));
 await done();

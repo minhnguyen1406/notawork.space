@@ -152,13 +152,49 @@
 .ft-touch-on #help {
   display: none;
 }
+
+/* The small map shrinks on a phone-sized screen, and moves out from under the buttons. */
+@media (max-width: 720px), (max-height: 500px) {
+  .ft-touch-on .ft-minimap:not(.ft-minimap--large) .ft-minimap-canvas {
+    width: 112px !important;
+    height: auto !important;
+  }
+}
 @media (max-width: 720px) {
-  /* The room puts chat and the prompt at the bottom of a narrow screen, where the controls now are. */
+  /* The room puts chat and the prompt at the bottom of a narrow screen, where the controls now are:
+     chat goes just under the top bar, with the small map (when it is showing) to its left. */
   .ft-touch-on #chat {
     top: var(--ft-touch-top, 110px);
     bottom: auto;
   }
+  .ft-touch-on .ft-minimap:not(.ft-minimap--large) {
+    top: var(--ft-touch-top, 110px);
+    bottom: auto;
+    left: calc(14px + env(safe-area-inset-left, 0px));
+    right: auto;
+  }
+  .ft-touch-on:has(.ft-minimap:not([hidden]):not(.ft-minimap--large)) #chat {
+    width: calc(100vw - 28px - 124px);
+  }
   .ft-touch-on #prompt {
     bottom: calc(236px + env(safe-area-inset-bottom, 0px));
+  }
+}
+@media (min-width: 721px) {
+  /* A wide screen: the top bar wraps before it runs under the chat box, and the small map sits
+     beside the joystick, away from the buttons. */
+  .ft-touch-on #topbar {
+    max-width: calc(100vw - 362px);
+  }
+  .ft-touch-on .ft-minimap:not(.ft-minimap--large) {
+    left: calc(168px + env(safe-area-inset-left, 0px));
+    right: auto;
+    bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  }
+}
+@media (max-height: 500px) {
+  /* A phone on its side: keep the chat clear of the buttons below it. */
+  .ft-touch-on #chat-log {
+    max-height: 24vh;
   }
 }
