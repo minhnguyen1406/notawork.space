@@ -194,7 +194,7 @@ export function wolfVote(g: WolfGame, pid: string, targetId: string, now: number
 
 /** Move a stalled night or day on, counting only the choices made so far. */
 export function wolfForce(g: WolfGame, pid: string, now: number): boolean {
-  if (!playing(g) || !find(g, pid)?.alive || now - g.since < FORCE_AFTER_MS) return false;
+  if (!playing(g) || !find(g, pid)?.alive || !(now - g.since >= FORCE_AFTER_MS)) return false;
   if (g.phase === 'night') resolveNight(g, now);
   else resolveDay(g, now);
   return true;
@@ -210,7 +210,8 @@ export function wolfLeave(g: WolfGame, pid: string, now: number) {
   delete g.votes[pid];
   for (const [k, v] of Object.entries(g.kills)) if (v === pid) delete g.kills[k];
   for (const [k, v] of Object.entries(g.votes)) if (v === pid) delete g.votes[k];
-  if (g.protect === pid) g.protect = null;
+  // Only the living count: a doctor who walks away no longer protects anyone, and nobody protects someone who left.
+  if (g.protect === pid || me.role === 'doctor') g.protect = null;
   if (checkWin(g)) return;
   if (g.phase === 'night' && nightDone(g)) resolveNight(g, now);
   else if (g.phase === 'day' && living(g).every((p) => g.votes[p.id])) resolveDay(g, now);

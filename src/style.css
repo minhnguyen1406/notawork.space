@@ -1276,3 +1276,14 @@ body.ui-hidden #theater,
 body.ui-hidden #guide {
   display: none !important;
 }
+
+/* "Skip <name>" at the card tables: for when the player whose turn it is has walked away */
+.skip-turn {
+  align-self: center;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.skip-turn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

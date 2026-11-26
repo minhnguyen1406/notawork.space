@@ -37,10 +37,12 @@ export interface CardsView {
   dir: 1 | -1;
   hand: Card[];
   winner: string | null;
+  /** Milliseconds, counted from when this view was made, until anyone else may skip the player whose turn it is. */
+  skipIn: number;
   you: string;
 }
 
-export type CardsAction = { k: 'start' } | { k: 'play'; card: Card; suit?: Suit } | { k: 'draw' };
+export type CardsAction = { k: 'start' } | { k: 'play'; card: Card; suit?: Suit } | { k: 'draw' } | { k: 'skip' };
 
 export interface PokerView {
   phase: 'lobby' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
@@ -66,6 +68,8 @@ export interface PokerView {
   raise: { min: number; max: number } | null;
   results: string[];
   seated: number;
+  /** Milliseconds, counted from when this view was made, until anyone else may skip the player whose turn it is. */
+  skipIn: number;
   you: string;
 }
 

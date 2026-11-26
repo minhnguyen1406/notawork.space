@@ -245,3 +245,96 @@ test('leaving in the lobby just removes you', () => {
   expect(sumoLeave(g, 'a', 0)).toEqual([]);
   expect(g.players).toEqual([]);
 });
+
+// Regressions found by tests/sim/sumo.sim.test.ts.
+
+test('regression: a match where nobody ever wins a round (everyone sat down) is called off, not replayed for ever', () => {
+  const g = newSumo();
+  for (const p of [ann, bao]) sumoJoin(g, p);
+  const seated: Spots = { a: { x: 9, z: 9, seat: 'sofa' }, b: { x: 8, z: 9, seat: 'sofa2' } };
+  let now = 0;
+  sumoStart(g, 'a', now);
+  const seen: string[] = [];
+  // Ten minutes of ticks, ten a second, with both of them sitting at a table.
+  for (let i = 0; i < 6000 && g.phase !== 'lobby'; i++) seen.push(...tick(g, (now += 100), seated).map((e) => e.k));
+  expect(g.phase).toBe('lobby');
+  expect(g.round).toBe(3);
+  expect(g.champion).toBeNull();
+  expect(seen.filter((k) => k === 'abandon')).toEqual(['abandon']);
+});
+
+test('regression: a round somebody wins clears the count of empty rounds', () => {
+  const g = newSumo();
+  for (const p of [ann, bao, chi]) sumoJoin(g, p);
+  const seated: Spots = { a: { x: 9, z: 9, seat: 's1' }, b: { x: 8, z: 9, seat: 's2' }, c: { x: 7, z: 9, seat: 's3' } };
+  let now = 0;
+  sumoStart(g, 'a', now);
+  // Two empty rounds, then Chi stands in the ring alone and wins one, then two more empty rounds.
+  const round = (spots: Spots) => {
+    while (g.phase === 'countdown' || g.phase === 'bout') tick(g, (now += 100), spots);
+    while (g.phase === 'result') tick(g, (now += 100), spots);
+  };
+  round(seated);
+  round(seated);
+  round({ ...seated, c: { x: 0, z: 0 } });
+  expect(g.wins).toEqual({ c: 1 });
+  round(seated);
+  round(seated);
+  expect(g.phase).not.toBe('lobby');
+  round(seated);
+  expect(g.phase).toBe('lobby');
+});
+
+test('regression: positions that are not numbers never give a push that is not a number', () => {
+  const bad = [NaN, Infinity, -Infinity, 1e308, -1e308];
+  for (const v of bad)
+    for (const m of [{ x: v, z: 0, px: 0, pz: 0 }, { x: 0, z: v, px: 0, pz: 0 }, { x: 0.3, z: 0, px: v, pz: 0 }, { x: 0.3, z: 0, px: 0, pz: v }, { x: v, z: v, px: v, pz: v }] as Mover[]) {
+      for (const p of [sumoPush(m, still(0.5, 0)), sumoPush(still(0.5, 0), m), sumoPush(m, m)]) {
+        if (!p) continue;
+        for (const n of [p.a.dx, p.a.dz, p.b.dx, p.b.dz]) expect(Number.isFinite(n)).toBe(true);
+        expect(len(p.a)).toBeLessThanOrEqual(PUSH_CAP + 1e-9);
+        expect(len(p.b)).toBeLessThanOrEqual(PUSH_CAP + 1e-9);
+      }
+      for (const out of Object.values(sumoPushes({ a: m, b: still(0.5, 0), c: still(0.2, 0.2) }))) expect(Number.isFinite(out.dx) && Number.isFinite(out.dz)).toBe(true);
+    }
+});
+
+test('regression: someone whose position is not a number is not "in the ring", and is stood somewhere real when out', () => {
+  const { g, spots } = bout(ann, bao, chi);
+  spots.a = { x: NaN, z: 0 };
+  const ev = tick(g, COUNTDOWN_MS + 100, spots);
+  expect(ev).toContainEqual({ k: 'out', id: 'a' });
+  expect(g.alive).toEqual(['b', 'c']);
+  for (const [x, z] of [[NaN, 0], [0, NaN], [Infinity, -Infinity], [1e308, 1e308]]) {
+    const s = sumoOutside(x, z, ring);
+    expect(Number.isFinite(s.x) && Number.isFinite(s.z)).toBe(true);
+    expect(Math.hypot(s.x - ring.x, s.z - ring.z)).toBeCloseTo(ring.r + 1.2);
+  }
+});
+
+/** The real server factory with a recording room, for the regressions that are about what it sends. */
+async function serverRoom(people: { id: string; x: number; z: number; seat: string | null }[]) {
+  const { create } = await import('../../worker/src/minigames/sumo');
+  const puts: { id: string; x: number; z: number }[] = [];
+  const nudges: string[] = [];
+  const nop = () => {};
+  const info = () => people.map((p) => ({ ...p, name: p.id, color: '', look: '', ry: 0 }));
+  const game = create({ players: info, send: nop, broadcast: nop, notice: nop, emote: nop, put: (id, x, z) => puts.push({ id, x, z }), nudge: (id) => nudges.push(id), resetBall: nop, setScore: nop });
+  for (const p of info()) game.onAction(p, { k: 'join' }, 0);
+  game.onAction(info()[0], { k: 'start' }, 0);
+  return { game, puts, nudges };
+}
+
+test('regression: someone sitting down is not moved to a starting place in the ring', async () => {
+  const { puts } = await serverRoom([{ id: 'a', x: 0, z: 0, seat: null }, { id: 'b', x: 5, z: 5, seat: 'sofa' }, { id: 'c', x: 1, z: 1, seat: null }]);
+  expect(puts.map((p) => p.id)).toEqual(['a', 'c']);
+});
+
+test('regression: on the tick the bout starts, people who are not in the ring are not shoved about', async () => {
+  // Two cheats who left the ring during the countdown and stand on one spot at the edge of the roof.
+  const people = [{ id: 'a', x: 0, z: 0, seat: null as string | null }, { id: 'b', x: 0, z: 0, seat: null as string | null }];
+  const { game, nudges } = await serverRoom(people);
+  for (const p of people) [p.x, p.z] = [20, 44];
+  game.tick!(COUNTDOWN_MS);
+  expect(nudges).toEqual([]);
+});

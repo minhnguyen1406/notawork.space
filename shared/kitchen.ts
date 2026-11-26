@@ -82,6 +82,7 @@ export function useStation(s: KitchenState, pid: string, st: Station, now: numbe
 
   switch (st.type) {
     case 'crate':
+      if (!st.ing || !Object.hasOwn(ING_LABEL, st.ing)) return no; // not a real crate
       if (!held) {
         s.held[pid] = { k: 'ing', type: st.ing!, st: 'raw' };
         return ok;
@@ -120,8 +121,10 @@ export function useStation(s: KitchenState, pid: string, st: Station, now: numbe
       return { changed: true, served: name };
     }
 
-    default: {
-      // counter, board, stove: one item each
+    case 'counter':
+    case 'board':
+    case 'stove': {
+      // one item each
       const slot = s.slots[st.id] ?? null;
       settle(slot, now);
 
@@ -155,6 +158,9 @@ export function useStation(s: KitchenState, pid: string, st: Station, now: numbe
       }
       return no;
     }
+
+    default:
+      return no; // not a kind of station this kitchen has
   }
 }
 
@@ -169,4 +175,14 @@ export function actStation(s: KitchenState, st: Station): boolean {
     delete slot.prog;
   }
   return true;
+}
+
+/**
+ * Someone left the room. Whatever they were carrying goes with them: crates and the plate stack
+ * never run out, so nothing needs to be handed back. Returns true if they were holding something.
+ */
+export function kitchenLeave(s: KitchenState, pid: string): boolean {
+  const had = !!s.held[pid];
+  delete s.held[pid];
+  return had;
 }

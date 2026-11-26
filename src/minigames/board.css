@@ -1,0 +1,52 @@
+.mg-board .mg-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.mg-board .mg-board-table {
+  min-width: 0;
+  padding: 10px 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 233, 201, 0.04);
+}
+.mg-board .mg-board-table h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--accent-2);
+}
+.mg-board .mg-board-table ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mg-board .mg-board-table li {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 4px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.mg-board .mg-board-table li.me {
+  background: rgba(243, 167, 18, 0.2);
+  font-weight: 700;
+}
+.mg-board .mg-board-rank {
+  flex: none;
+  width: 1.6em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mg-board .mg-board-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg-board .mg-board-score {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}

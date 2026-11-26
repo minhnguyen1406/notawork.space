@@ -302,3 +302,15 @@ test('server: stop, walking out and leaving the room cancel only that run; a new
   r.game.onJoin!(r.people.get('d')!, 0);
   expect(r.log).toEqual([{ to: 'd', view: { best: [{ name: 'Ann', ms: 5000 }], runners: [] } }]);
 });
+
+test('regression: a barrier is still somewhere in the lane for a time that is not a number', () => {
+  // Found by tests/sim/obstacle.sim.test.ts: sin(Infinity) is NaN, so the barrier was at NaN
+  // (and a huge time overflows to Infinity on the way).
+  for (const t of [NaN, Infinity, -Infinity, 1e308, -1e308])
+    for (const b of BARRIERS) {
+      const c = barrierAt(b, t);
+      if (!Number.isFinite(t)) expect(c).toEqual(barrierAt(b, 0));
+      expect(Number.isFinite(c.x) && Number.isFinite(c.z)).toBe(true);
+    }
+  expect(barrierHit(START_X, MID_Z, Infinity)).toBe(-1);
+});

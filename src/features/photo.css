@@ -1,0 +1,123 @@
+/* Photo mode. The top-bar button, then the layer that stays up while the interface is hidden. */
+.ft-photo-open {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+}
+.ft-photo-open svg {
+  display: block;
+}
+
+.ft-photo-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+  z-index: 40;
+}
+.ft-photo-bar button {
+  backdrop-filter: none;
+}
+.ft-photo-shoot {
+  background: var(--accent);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.ft-photo-status {
+  position: fixed;
+  left: 50%;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  background: var(--accent-2);
+  color: #2a1a00;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 8px 16px;
+  max-width: calc(100vw - 28px);
+  z-index: 40;
+}
+
+.ft-photo-count {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: min(40vh, 40vw);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 6px 40px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 39;
+}
+
+.ft-photo-flash {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 45;
+}
+.ft-photo-flash-on {
+  animation: ft-photo-flash 0.45s ease-out;
+}
+@keyframes ft-photo-flash {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.ft-photo-preview {
+  position: fixed;
+  right: 16px;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  z-index: 40;
+}
+.ft-photo-thumb {
+  display: block;
+  width: 180px;
+  max-width: 40vw;
+  border-radius: 8px;
+}
+.ft-photo-saved {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.ft-photo-copy {
+  padding: 6px 12px;
+}
+
+/* On a narrow screen the preview would sit on the bar: lift it above. */
+@media (max-width: 640px) {
+  .ft-photo-preview {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ft-photo-flash-on {
+    animation-duration: 0.15s;
+  }
+}

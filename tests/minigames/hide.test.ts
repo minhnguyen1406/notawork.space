@@ -164,3 +164,36 @@ test('the view says who is found but never where anyone is', () => {
   for (const secret of ['17.5', '3.25', '1.25', '"x"', '"z"', 'seat']) expect(json).not.toContain(secret);
   expect(Object.keys(v).sort()).toEqual(['found', 'left', 'news', 'phase', 'players', 'result', 'seeker']);
 });
+
+test('regression: a position that is not a number is never within reach, for the hider or the seeker', () => {
+  // Found by tests/sim/hide.sim.test.ts: `distance > FIND_RADIUS` is false for NaN, so NaN counted as found.
+  const g = seeking();
+  expect(hideTick(g, HIDING_MS + 100, [spot('a', 0, 0), spot('b', NaN, 0), spot('c', 20, NaN)]).found).toEqual([]);
+  expect(hideTick(g, HIDING_MS + 200, [spot('a', NaN, NaN), spot('b', 0.5, 0), spot('c', Infinity, Infinity)]).found).toEqual([]);
+  expect(hideTick(g, HIDING_MS + 300, [spot('a', Infinity, 0), spot('b', Infinity, 0), spot('c', 20, 0)]).found).toEqual([]);
+  expect(g.phase).toBe('seeking');
+  // Sitting down is still giving up, wherever the browser says it is.
+  expect(hideTick(g, HIDING_MS + 400, [spot('a', 0, 0), spot('b', NaN, 0, 'sofa'), spot('c', 20, 0)]).found).toEqual(['b']);
+});
+
+test('regression: a seeker whose position is not a number is not "put back" to nowhere while counting', async () => {
+  // Found by tests/sim/hide.sim.test.ts with positions the real room would have clamped: the anchor was
+  // taken as it came, and the leash check then sent `put(id, -1e9, Infinity)`.
+  const { create } = await import('../../worker/src/minigames/hide');
+  const who = (id: string, x: number, z: number) => ({ id, name: id, color: '', look: '', x, z, ry: 0, seat: null });
+  let people = [who('a', -1e9, Infinity), who('b', 5, 5)];
+  const puts: number[][] = [];
+  const nop = () => {};
+  const game = create({ players: () => people, send: nop, broadcast: nop, notice: nop, emote: nop, put: (_id, x, z) => puts.push([x, z]), nudge: nop, resetBall: nop, setScore: nop });
+  for (const p of people) game.onAction(p, { k: 'join' }, 0);
+  const rnd = Math.random;
+  Math.random = () => 0; // the first to join seeks
+  try {
+    game.onAction(people[0], { k: 'start' }, 0);
+  } finally {
+    Math.random = rnd;
+  }
+  people = [who('a', 3, 3), who('b', 5, 5)];
+  game.tick!(100);
+  expect(puts.flat().every(Number.isFinite)).toBe(true);
+});

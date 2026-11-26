@@ -20,6 +20,7 @@ import { BALL_R, centreBall, stepBall, type BallState } from '../shared/ball';
 import type { GamesState, Lap } from '../shared/protocol';
 import { box, glow, mat } from './world';
 import { textSprite } from './avatar';
+import { furnish } from './furniture';
 
 const FONT = 'ui-rounded, system-ui, sans-serif';
 const WHEEL_R = 2.6;
@@ -362,7 +363,10 @@ export class Games {
 
     // Chess table with a checkered top.
     const C = CHESS_TABLE;
-    scene.add(box(1.5, 0.1, 1.5, '#5e3e29', C.x, 0.9, C.z), box(0.3, 0.86, 0.3, '#5e3e29', C.x, 0.43, C.z));
+    const chessTable = [box(1.5, 0.1, 1.5, '#5e3e29', C.x, 0.9, C.z), box(0.3, 0.86, 0.3, '#5e3e29', C.x, 0.43, C.z)];
+    scene.add(...chessTable);
+    furnish(scene, 'tableCoffeeSquare', { x: C.x, z: C.z, w: 1.5, h: 0.95, d: 1.5, tint: { wood: '#5e3e29' } }, chessTable);
+    furnish(scene, 'rugRound', { x: C.x, y: 0.014, z: C.z, w: 4.8, h: 0.03, d: 4.8, tint: { carpet: '#8a3440', carpetDarker: '#5f2230' } });
     for (let i = 0; i < 8; i++)
       for (let j = 0; j < 8; j++) {
         const sq = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.15), mat((i + j) % 2 ? '#ead9b8' : '#7a5236'));
@@ -381,7 +385,12 @@ export class Games {
       top.castShadow = true;
       const rim = new THREE.Mesh(new THREE.CylinderGeometry(K.r + 0.08, K.r + 0.08, 0.08, 24), mat('#5e3e29'));
       rim.position.set(K.x, 0.86, K.z);
-      scene.add(top, rim, box(0.4, 0.84, 0.4, '#5e3e29', K.x, 0.42, K.z));
+      const leg = box(0.4, 0.84, 0.4, '#5e3e29', K.x, 0.42, K.z);
+      scene.add(top, rim, leg);
+      // The felt stays; the kit's table goes underneath it in place of the rim and the leg.
+      furnish(scene, 'tableRound', { x: K.x, z: K.z, w: 3.2, h: 0.86, d: 3.6, tint: { wood: '#5e3e29' } }, [rim, leg]);
+      const rugTint = K === CARDS_TABLE ? { carpet: '#2f5a55', carpetDarker: '#234541' } : { carpet: '#a8683a', carpetDarker: '#7d4a2a' };
+      furnish(scene, 'rugRound', { x: K.x, y: 0.014, z: K.z, w: 6.2, h: 0.03, d: 6.2, tint: rugTint });
       const label = textSprite(name, 0.4);
       label.position.set(K.x, 2.6, K.z);
       scene.add(label);
@@ -395,8 +404,10 @@ export class Games {
       chair.position.set(seat.x, 0, seat.z);
       chair.rotation.y = seat.ry;
       scene.add(chair);
+      const at = { x: seat.x, z: seat.z, ry: seat.ry, w: 0.7, h: 1.25, d: 0.7 };
+      if (seat.group === 'chess') furnish(scene, 'chair', { ...at, tint: { wood: color } }, [chair]);
+      else furnish(scene, 'chairCushion', { ...at, tint: { wood: color, carpet: seat.group === 'cards' ? '#2f7d55' : '#7d2f3c' } }, [chair]);
     }
-
   }
 
   // ------------------------------------------------------------ south-west corner: Werewolf and Phố Lớn
@@ -439,8 +450,10 @@ export class Games {
     // Phố Lớn: a long table with the board on it.
     const T = PHO_TABLE;
     flat(new THREE.PlaneGeometry(7, 5.6), '#3d2f52', T.x, T.z);
-    scene.add(box(4, 0.12, 1.5, '#7a5236', T.x, 0.9, T.z));
-    for (const dx of [-1.7, 1.7]) scene.add(box(0.18, 0.86, 1.2, '#5e3e29', T.x + dx, 0.43, T.z));
+    const phoTable = [box(4, 0.12, 1.5, '#7a5236', T.x, 0.9, T.z)];
+    for (const dx of [-1.7, 1.7]) phoTable.push(box(0.18, 0.86, 1.2, '#5e3e29', T.x + dx, 0.43, T.z));
+    scene.add(...phoTable);
+    furnish(scene, 'tableCross', { x: T.x, z: T.z, w: 4, h: 0.96, d: 1.5, tint: { wood: '#7a5236' } }, phoTable);
     scene.add(box(1.2, 0.03, 1.2, '#f3ead8', T.x, 0.975, T.z));
     scene.add(box(0.8, 0.035, 0.8, '#ffd76a', T.x, 0.98, T.z));
     for (const seat of SEATS.filter((s) => s.group === 'pho')) {
@@ -450,6 +463,7 @@ export class Games {
       chair.position.set(seat.x, 0, seat.z);
       chair.rotation.y = seat.ry;
       scene.add(chair);
+      furnish(scene, 'chairRounded', { x: seat.x, z: seat.z, ry: seat.ry, w: 0.7, h: 1.25, d: 0.7, tint: { wood: '#c9a26b' } }, [chair]);
     }
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), glow('#ffe2a8', 2.4));
     lamp.position.set(T.x, 3.2, T.z);

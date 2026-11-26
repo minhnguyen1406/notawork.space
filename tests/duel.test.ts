@@ -95,3 +95,21 @@ test('a duel that never ends is called a draw after fifteen rounds', () => {
   expect(d.phase).toBe('over');
   expect(d.winner).toBe('');
 });
+
+// ---- regressions found by tests/sim/duel.sim.test.ts
+
+test('regression: someone who is not in the duel cannot forfeit it', () => {
+  const d = start();
+  duelForfeit(d, 'zed', 10);
+  expect(d.phase).toBe('pick');
+  expect(d.winner).toBeNull();
+});
+
+test('regression: a broken clock does not resolve a round or freeze the duel', () => {
+  const d = start();
+  duelPick(d, 'a', 'pillow');
+  expect(duelTick(d, NaN)).toBe(false);
+  expect(d.phase).toBe('pick');
+  expect(d.a.hearts).toBe(HEARTS);
+  expect(Number.isFinite(d.until)).toBe(true);
+});

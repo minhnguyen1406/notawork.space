@@ -8,7 +8,9 @@ export const create: GameFactory = (io) => {
   /** Ball on the spot and everyone back in their own half. */
   const lineUp = () => {
     io.resetBall();
-    for (const s of cupSpots(g)) io.put(s.id, s.x, s.z);
+    // `put` moves people without standing them up, so someone sitting down is left in their chair.
+    const seated = new Set(io.players().filter((p) => p.seat).map((p) => p.id));
+    for (const s of cupSpots(g)) if (!seated.has(s.id)) io.put(s.id, s.x, s.z);
   };
   const fullTime = () => {
     if (g.result) io.notice(cupSummary(g.result));
@@ -20,7 +22,7 @@ export const create: GameFactory = (io) => {
       if (a.k === 'join') {
         changed = cupJoin(g, p);
         // Arriving mid-match: start from a place in their own half.
-        const spot = changed && g.phase !== 'lobby' && cupSpots(g).find((s) => s.id === p.id);
+        const spot = changed && g.phase !== 'lobby' && !p.seat && cupSpots(g).find((s) => s.id === p.id);
         if (spot) io.put(p.id, spot.x, spot.z);
       } else if (a.k === 'leave') {
         const r = cupLeave(g, p.id);

@@ -1,5 +1,5 @@
 import { Chess, type Square } from 'chess.js';
-import { RULES, canPlay, rankOf, suitOf, SUITS, type Card, type CardsGame, type Suit } from '../shared/cards';
+import { RULES, SKIP_AFTER_MS, canPlay, rankOf, suitOf, SUITS, type Card, type CardsGame, type Suit } from '../shared/cards';
 import type {
   CardsAction,
   CardsView,
@@ -227,6 +227,7 @@ export class TableUI {
     }
 
     this.root.append(head, others, middle, hand);
+    if (!myTurn && v.turn) this.root.append(this.skipButton('cards', v, turnName));
 
     if (this.choosingSuitFor && myTurn && v.hand.includes(this.choosingSuitFor)) {
       const chooser = el('div', 'suit-chooser');
@@ -244,6 +245,37 @@ export class TableUI {
     } else {
       this.choosingSuitFor = null;
     }
+  }
+
+  // ------------------------------------------------------------ skipping someone who is away (Last Card and poker)
+
+  private skipTimer = 0;
+  /** When each view arrived, so the countdown keeps going across redraws of the same view. */
+  private seenAt = new WeakMap<object, number>();
+
+  /** "Skip <name>": anyone else at the table may press it once the turn has lasted long enough. */
+  private skipButton(table: 'cards' | 'poker', v: { skipIn: number }, name: string): HTMLElement {
+    clearInterval(this.skipTimer);
+    if (!this.seenAt.has(v)) this.seenAt.set(v, Date.now());
+    const readyAt = this.seenAt.get(v)! + v.skipIn;
+    const b = el('button', 'skip-turn');
+    b.type = 'button';
+    b.title = `For when ${name} has walked away. Available ${SKIP_AFTER_MS / 1000} seconds into their turn.`;
+    b.onclick = () => this.send(table, { k: 'skip' });
+    const paint = () => {
+      const left = Math.ceil((readyAt - Date.now()) / 1000);
+      b.disabled = left > 0;
+      b.textContent = left > 0 ? `Skip ${name} (in ${left}s)` : `Skip ${name}`;
+      return left > 0;
+    };
+    if (paint()) {
+      // Count down once a second; stop when the wait is over or the button has been replaced.
+      const timer = window.setInterval(() => {
+        if (!b.isConnected || !paint()) clearInterval(timer);
+      }, 250);
+      this.skipTimer = timer;
+    }
+    return b;
   }
 
   // ------------------------------------------------------------ poker
@@ -340,6 +372,8 @@ export class TableUI {
       this.root.append(actions);
     } else {
       this.raiseTo = 0;
+      const who = v.players.find((p) => p.id === v.turn);
+      if (who) this.root.append(this.skipButton('poker', v, who.name));
     }
     if (v.waiting.length && v.phase !== 'lobby') {
       this.root.append(el('p', 'game-note', `Waiting for the next hand: ${v.waiting.join(', ')}`));

@@ -34,9 +34,12 @@ export interface Combo {
 /** What these cards are as a play in this version, or null if they are not a legal play. Treats its input as hostile. */
 export function classify(cards: unknown, variant: Variant): Combo | null {
   if (!Array.isArray(cards) || cards.length < 1 || cards.length > TL_HAND) return null;
+  // Check that they are card numbers before sorting: subtracting some objects (JSON like {"valueOf":0,"toString":0}) throws.
+  // (By index, so that a hole in the list counts as rubbish too.)
+  for (let i = 0; i < cards.length; i++) if (typeof cards[i] !== 'number' || !Number.isInteger(cards[i]) || cards[i] < 0 || cards[i] > 51) return null;
   const s = [...(cards as number[])].sort((a, b) => a - b);
   const n = s.length;
-  for (let i = 0; i < n; i++) if (!Number.isInteger(s[i]) || s[i] < 0 || s[i] > 51 || (i > 0 && s[i] === s[i - 1])) return null;
+  for (let i = 1; i < n; i++) if (s[i] === s[i - 1]) return null;
   const top = s[n - 1];
   const ranks = s.map(rankOf);
   const north = variant === 'bac';

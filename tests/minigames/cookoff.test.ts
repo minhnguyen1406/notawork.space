@@ -221,3 +221,18 @@ test('the view keeps only the last few serves, newest last', () => {
   expect(v.score.red).toBe(14);
   expect(v.players.find((p) => p.id === 'a')!.pts).toBe(14);
 });
+
+test('regression: a serve with no dish name, or one that is not text, scores nothing and stays out of the feed', () => {
+  // Found by tests/sim/cookoff.sim.test.ts: any value at all was taken as "a dish we do not know",
+  // worth a point, and went into the feed (and so into every view) as it came.
+  const g = newCookoff();
+  cookJoin(g, { id: 'a', name: 'Ann' }, () => 0);
+  cookJoin(g, { id: 'b', name: 'Bao' }, () => 0);
+  cookStart(g, 'a', 0);
+  cookTick(g, COUNTDOWN_MS, () => 0);
+  for (const dish of ['', null, undefined, NaN, 7, {}, ['Burger']]) expect(cookServe(g, 'a', dish as string, COUNTDOWN_MS + 1, () => 0)).toBeNull();
+  expect(g.score).toEqual({ red: 0, blue: 0 });
+  expect(g.feed).toEqual([]);
+  // A dish with a name nobody knows is still a dish: one point.
+  expect(cookServe(g, 'a', 'Mud Pie', COUNTDOWN_MS + 2, () => 0)?.pts).toBe(1);
+});

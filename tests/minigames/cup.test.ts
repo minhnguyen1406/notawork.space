@@ -209,3 +209,39 @@ test('the view carries nothing but the public state', () => {
   expect(Object.keys(cupView(g, PAUSE_MS)).sort()).toEqual(['clock', 'extra', 'last', 'phase', 'pause', 'players', 'result', 'scorers', 'score'].sort());
   expect(cupView(newCup(), 0)).toMatchObject({ phase: 'lobby', pause: 0, clock: 0, result: null });
 });
+
+test('regression: a shuffle survives a random source that returns exactly 1', () => {
+  // Found by tests/sim/cup.sim.test.ts. Math.random never returns 1, but the other games' rules guard
+  // against an injected source that does, and this one threw "Cannot set properties of undefined".
+  const g = newCup();
+  for (const id of ['a', 'b', 'c', 'd', 'e']) cupJoin(g, { id, name: id.toUpperCase() });
+  expect(cupShuffle(g, 'a', () => 1)).toBe(true);
+  expect(g.players.map((p) => p.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  expect(Math.abs(cupTeam(g, 'red').length - cupTeam(g, 'blue').length)).toBe(1);
+});
+
+test('regression: the line-up leaves someone who is sitting down in their chair', async () => {
+  // Found by tests/sim: `put` moves a person without standing them up, so a seated player was dragged
+  // on to the pitch still "seated". They are lined up like everyone else once they stand.
+  const { create } = await import('../../worker/src/minigames/cup');
+  const people = [
+    { id: 'a', name: 'Ann', color: '', look: '', x: 0, z: 0, ry: 0, seat: null as string | null },
+    { id: 'b', name: 'Bao', color: '', look: '', x: 5, z: 5, ry: 0, seat: 'sofa' as string | null },
+    { id: 'c', name: 'Chi', color: '', look: '', x: 6, z: 5, ry: 0, seat: 'sofa2' as string | null },
+  ];
+  const puts: string[] = [];
+  const nop = () => {};
+  const game = create({ players: () => people, send: nop, broadcast: nop, notice: nop, emote: nop, put: (id) => puts.push(id), nudge: nop, resetBall: nop, setScore: nop });
+  game.onAction(people[0], { k: 'join' }, 0);
+  game.onAction(people[1], { k: 'join' }, 0);
+  game.onAction(people[0], { k: 'kickoff' }, 0);
+  expect(puts).toEqual(['a']);
+  // Joining mid-match from a chair does not move you either.
+  game.onAction(people[2], { k: 'join' }, 100);
+  expect(puts).toEqual(['a']);
+  // After a goal, whoever has stood up by then is lined up.
+  people[1].seat = null;
+  game.tick!(PAUSE_MS);
+  game.onEvent!({ kind: 'goal', side: 'red', by: 'Ann' }, PAUSE_MS + 1000);
+  expect(puts).toEqual(['a', 'a', 'b']);
+});

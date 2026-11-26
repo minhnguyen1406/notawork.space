@@ -188,3 +188,22 @@ test("someone leaving doesn't leave the night waiting on them", () => {
   wolfLeave(g, 'chi', 2); // the doctor was the last one to act
   expect(g.phase).toBe('day');
 });
+
+// ---- regressions found by tests/sim/werewolf.sim.test.ts
+
+test('regression: a doctor who leaves takes their protection with them', () => {
+  const g = start();
+  wolfNight(g, 'chi', 'dung', 1); // the doctor protects Dung...
+  wolfLeave(g, 'chi', 2); // ...and then walks away from the table
+  expect(g.protect).toBeNull();
+  wolfNight(g, 'ann', 'dung', 3);
+  wolfNight(g, 'bao', 'ann', 4);
+  expect(g.phase).toBe('day');
+  expect(alive(g)).not.toContain('dung'); // only a living doctor's choice counts
+});
+
+test('regression: a broken clock cannot force the night on early', () => {
+  const g = start();
+  expect(wolfForce(g, 'bao', NaN)).toBe(false);
+  expect(g.phase).toBe('night');
+});

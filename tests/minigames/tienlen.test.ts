@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import {
   RANKS,
   TURN_MS,
@@ -123,6 +123,21 @@ test('nam: runs of pairs need three or more consecutive pairs and never 2s', () 
 test('classify rejects rubbish from a browser, in both versions', () => {
   for (const v of ['nam', 'bac'] as const)
     for (const bad of [undefined, null, 'x', 5, {}, [], [1.5], [-1], [52], ['3'], [NaN], [4, 4], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]]) expect(classify(bad, v)).toBeNull();
+});
+
+// Found by tests/sim/tienlen.sim.test.ts: sorting the cards before checking them subtracted objects, which throws for these.
+test('regression: a play containing objects that cannot be turned into numbers is refused, not thrown on', () => {
+  const nasty = JSON.parse('[{"valueOf":0,"toString":0}, 1]');
+  for (const v of ['nam', 'bac'] as const) {
+    expect(classify(nasty, v)).toBeNull();
+    expect(classify([Object.create(null), 0], v)).toBeNull();
+    expect(classify(new Array(1), v)).toBeNull();
+    const g = seat(v, ['3S 4S', '5S 6S']);
+    const before = JSON.stringify(g);
+    expect(tlPlay(g, 'a', nasty, 0)).toBe(false);
+    expect(typeof tlIllegal(v, g.hands.a, null, null, nasty)).toBe('string');
+    expect(JSON.stringify(g)).toBe(before);
+  }
 });
 
 // ---- Miền Bắc: classification ------------------------------------------------------------------
@@ -1043,4 +1058,45 @@ test('the server never broadcasts, sends each person only their own hand, and an
   expect(results).toHaveLength(4);
   expect(notices[0]).toContain(results[0].name);
   expect(broadcasts).toBe(0);
+});
+
+// Found by tests/sim/tienlen.sim.test.ts: the winner can go out first, leave the room, and only then does the hand end.
+test('regression: the server does not put a trophy over a winner who has already left the room', () => {
+  const room = people.slice(0, 3).map((p) => ({ ...p, color: '', look: '', x: 0, z: 0, ry: 0, seat: null }) as PlayerInfo);
+  const views = new Map<string, ReturnType<typeof tlView>>();
+  const notices: string[] = [];
+  const emotes: { id: string; k: string; here: boolean }[] = [];
+  const io: GameIO = {
+    players: () => room,
+    send: (to, view) => views.set(to, view as ReturnType<typeof tlView>),
+    broadcast: () => {},
+    notice: (t) => notices.push(t),
+    emote: (id, k) => emotes.push({ id, k, here: room.some((p) => p.id === id) }),
+    put: () => {},
+    nudge: () => {},
+    resetBall: () => {},
+    setScore: () => {},
+  };
+  // A fixed shuffle, so the same hand is played every time (and it is not an instant win).
+  const spy = vi.spyOn(Math, 'random').mockImplementation(seeded(11));
+  try {
+    const s = create(io);
+    for (const p of room) s.onAction(p, { k: 'join' }, 0);
+    s.onAction(room[0], { k: 'deal' }, 0);
+    expect(views.get('a')!.phase).toBe('play');
+    // The clock plays until someone is out of cards; they walk out of the room while the other two play on.
+    let now = 0;
+    const first = () => views.get(room[0].id)!.players.find((p) => p.out);
+    for (let i = 0; i < 600 && !first(); i++) s.tick!((now += 30_000));
+    const gone = first()!;
+    expect(views.get(room[0].id)!.phase).toBe('play');
+    room.splice(room.findIndex((p) => p.id === gone.id), 1);
+    s.onLeave(gone.id, now);
+    for (let i = 0; i < 600 && !notices.length; i++) s.tick!((now += 30_000));
+    expect(notices).toEqual([`${gone.name} won the hand of Tiến lên Miền Nam`]);
+    expect(views.get(room[0].id)!.results![0].id).toBe(gone.id);
+    expect(emotes.filter((e) => !e.here)).toEqual([]);
+  } finally {
+    spy.mockRestore();
+  }
 });

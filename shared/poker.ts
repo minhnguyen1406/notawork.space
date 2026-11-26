@@ -1,5 +1,5 @@
 // Texas Hold'em with play chips. Pure rules over a plain state object; the server runs them.
-import { newDeck, type Card } from './cards';
+import { SKIP_AFTER_MS, newDeck, type Card } from './cards';
 
 export const SMALL_BLIND = 10;
 export const BIG_BLIND = 20;
@@ -98,6 +98,8 @@ export interface PokerSeat {
   folded: boolean;
   allIn: boolean;
   acted: boolean;
+  /** The bet to match when they last acted this round; decides whether a later raise reopens the betting for them. */
+  facedBet: number;
   hole: Card[];
 }
 
@@ -116,9 +118,12 @@ export interface PokerGame {
   results: string[];
   /** Whether hole cards are turned over (a real showdown, not everyone folding). */
   shown: boolean;
+  /** When the player whose turn it is was first asked to act (the caller's clock, in milliseconds). */
+  turnSince: number;
 }
 
-export type PokerAction = { k: 'deal' } | { k: 'fold' } | { k: 'call' } | { k: 'raise'; to: number };
+/** 'deal' and 'skip' are table actions (pokerStart, pokerSkip); pokerAct takes the other three. */
+export type PokerAction = { k: 'deal' } | { k: 'fold' } | { k: 'call' } | { k: 'raise'; to: number } | { k: 'skip' };
 
 export const newPoker = (): PokerGame => ({
   phase: 'lobby',
@@ -133,11 +138,33 @@ export const newPoker = (): PokerGame => ({
   bank: {},
   results: [],
   shown: false,
+  turnSince: 0,
 });
 
 export const betting = (g: PokerGame) => g.phase !== 'lobby' && g.phase !== 'showdown';
 export const potOf = (g: PokerGame) => g.seats.reduce((sum, s) => sum + s.committed, 0);
 const canAct = (s: PokerSeat) => !s.folded && !s.allIn;
+/** The most people one deck can deal in: two cards each plus the five shared ones. */
+export const POKER_MAX_PLAYERS = 23;
+
+/**
+ * The smallest and largest totals a seat may raise to, or null if it may not raise.
+ * Someone who has already acted may only raise again when they face at least a full raise:
+ * an all-in for less than that does not reopen the betting for them.
+ */
+export function raiseRange(g: PokerGame, s: PokerSeat): { min: number; max: number } | null {
+  if (!betting(g) || !canAct(s)) return null;
+  const max = s.bet + s.chips;
+  if (max <= g.currentBet) return null;
+  if (s.acted && g.currentBet - s.facedBet < g.minRaise) return null;
+  return { min: Math.min(g.currentBet + g.minRaise, max), max };
+}
+
+/** Milliseconds until someone else may skip the player whose turn it is; 0 when they may, or when it is nobody's turn. */
+export function pokerSkipIn(g: PokerGame, now: number): number {
+  if (!betting(g) || !g.seats[g.turn]) return 0;
+  return Math.max(0, g.turnSince + SKIP_AFTER_MS - now);
+}
 
 function pay(s: PokerSeat, amount: number) {
   const paid = Math.min(amount, s.chips);
@@ -150,6 +177,9 @@ function pay(s: PokerSeat, amount: number) {
 /** The next seat after `from` that still owes a decision this round, or -1 if the round is over. */
 function nextToAct(g: PokerGame, from: number): number {
   const n = g.seats.length;
+  const able = g.seats.filter(canAct);
+  // One player left with chips and no bet to answer: everyone else is all-in or out, so there is nothing to decide.
+  if (able.length === 1 && able[0].bet >= g.currentBet) return -1;
   for (let k = 1; k <= n; k++) {
     const i = (from + k) % n;
     const s = g.seats[i];
@@ -159,13 +189,14 @@ function nextToAct(g: PokerGame, from: number): number {
 }
 
 /** Deal a new hand to the people seated. Needs two or more, and no hand in progress. */
-export function pokerStart(g: PokerGame, players: { id: string; name: string }[]): boolean {
-  if (betting(g) || players.length < 2) return false;
+export function pokerStart(g: PokerGame, players: { id: string; name: string }[], now: number): boolean {
+  if (betting(g) || players.length < 2 || players.length > POKER_MAX_PLAYERS) return false;
+  if (new Set(players.map((p) => p.id)).size !== players.length) return false;
   g.seats = players.map((p) => {
     let chips = g.bank[p.id] ?? BUY_IN;
     if (chips < BIG_BLIND) chips = BUY_IN; // busted: start again
     g.bank[p.id] = chips;
-    return { id: p.id, name: p.name, chips, bet: 0, committed: 0, folded: false, allIn: false, acted: false, hole: [] };
+    return { id: p.id, name: p.name, chips, bet: 0, committed: 0, folded: false, allIn: false, acted: false, facedBet: 0, hole: [] };
   });
   const n = g.seats.length;
   g.deck = newDeck();
@@ -185,6 +216,7 @@ export function pokerStart(g: PokerGame, players: { id: string; name: string }[]
   g.currentBet = BIG_BLIND;
   g.minRaise = BIG_BLIND;
   g.phase = 'preflop';
+  g.turnSince = now;
   g.turn = nextToAct(g, bb);
   if (g.turn === -1) nextStreet(g);
   return true;
@@ -231,6 +263,7 @@ function nextStreet(g: PokerGame) {
   for (const s of g.seats) {
     s.bet = 0;
     s.acted = false;
+    s.facedBet = 0;
   }
   g.currentBet = 0;
   g.minRaise = BIG_BLIND;
@@ -272,8 +305,8 @@ function progress(g: PokerGame, from: number) {
 }
 
 /** Apply a player's decision. Returns false if it isn't their turn or the action isn't allowed. */
-export function pokerAct(g: PokerGame, pid: string, a: PokerAction): boolean {
-  if (!betting(g)) return false;
+export function pokerAct(g: PokerGame, pid: string, a: PokerAction, now: number): boolean {
+  if (!betting(g) || !a || typeof a !== 'object') return false;
   const i = g.turn;
   const s = g.seats[i];
   if (!s || s.id !== pid) return false;
@@ -283,11 +316,11 @@ export function pokerAct(g: PokerGame, pid: string, a: PokerAction): boolean {
   } else if (a.k === 'call') {
     pay(s, g.currentBet - s.bet); // nothing owed means this is a check
   } else if (a.k === 'raise') {
+    if (typeof a.to !== 'number') return false;
     const to = Math.floor(a.to);
-    const max = s.bet + s.chips;
-    if (!(to > g.currentBet) || to > max) return false;
     // A raise must be at least the last raise, unless it is all the chips you have.
-    if (to < g.currentBet + g.minRaise && to !== max) return false;
+    const range = raiseRange(g, s);
+    if (!range || !(to >= range.min) || !(to <= range.max)) return false;
     const by = to - g.currentBet;
     pay(s, to - s.bet);
     if (by >= g.minRaise) g.minRaise = by;
@@ -296,17 +329,39 @@ export function pokerAct(g: PokerGame, pid: string, a: PokerAction): boolean {
     return false;
   }
   s.acted = true;
+  s.facedBet = g.currentBet;
+  g.turnSince = now;
   progress(g, i);
   return true;
 }
 
+/**
+ * Someone else at the table moves the game past a player who has wandered off: allowed once the
+ * turn has lasted SKIP_AFTER_MS. The absent player checks if that is free, and otherwise folds.
+ * `seated` is everyone sitting at the table right now.
+ */
+export function pokerSkip(g: PokerGame, by: string, now: number, seated: readonly string[]): boolean {
+  if (!betting(g)) return false;
+  const s = g.seats[g.turn];
+  if (!s || s.id === by || !Array.isArray(seated) || !seated.includes(by)) return false;
+  if (!(now - g.turnSince >= SKIP_AFTER_MS)) return false;
+  return pokerAct(g, s.id, { k: g.currentBet > s.bet ? 'fold' : 'call' }, now);
+}
+
 /** Someone left the table mid-hand: their hand is folded and what they put in stays in the pot. */
-export function pokerLeave(g: PokerGame, pid: string) {
+export function pokerLeave(g: PokerGame, pid: string, now: number) {
   if (!betting(g)) return;
   const i = g.seats.findIndex((s) => s.id === pid);
   if (i < 0 || g.seats[i].folded) return;
   g.seats[i].folded = true;
   g.seats[i].acted = true;
   g.bank[pid] = g.seats[i].chips;
-  if (g.turn === i || g.seats.filter((s) => !s.folded).length === 1) progress(g, g.turn === i ? i : g.turn);
+  if (g.turn === i) {
+    g.turnSince = now; // the clock starts again for whoever is next
+    progress(g, i);
+  } else if (g.seats.filter((s) => !s.folded).length === 1 || nextToAct(g, g.turn - 1) !== g.turn) {
+    // The hand is over, or the player to act has nobody left to bet against: move on without them.
+    g.turnSince = now;
+    progress(g, g.turn);
+  }
 }

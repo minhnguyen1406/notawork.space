@@ -64,7 +64,7 @@ function statusText(v: WordsView): string {
 function resultText(v: WordsView): string {
   if (!v.result) return '';
   const { winner, reason } = v.result;
-  if (!winner) return 'The last game stopped: a team ran short of players.';
+  if (!winner) return 'The last game stopped early.';
   return reason === 'trap' ? `${TEAM[winner === 'red' ? 'blue' : 'red']} team hit the trap: ${TEAM[winner]} team wins!` : `${TEAM[winner]} team found all its words and wins!`;
 }
 

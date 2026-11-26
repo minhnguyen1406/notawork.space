@@ -112,6 +112,13 @@ export class Room extends DurableObject<Env> {
         put: (pid, x, z) => {
           for (const p of this.players.values()) {
             if (p.id !== pid) continue;
+            // Being moved somewhere means getting up first: otherwise they would be "sitting" out on the floor.
+            if (p.seat) {
+              const before = p.seat;
+              p.seat = null;
+              this.broadcast({ t: 'sit', id: p.id, seat: null });
+              this.tables.seatChanged(p, before);
+            }
             p.x = clamp(x - CENTRE_X, HALF_X) + CENTRE_X;
             p.z = clamp(z - CENTRE_Z, HALF_Z) + CENTRE_Z;
             this.moved = true;

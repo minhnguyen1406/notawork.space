@@ -96,7 +96,7 @@ export function cupShuffle(g: CupGame, by: string, rnd: () => number = Math.rand
   if (live(g) || !has(g, by) || g.players.length < 2) return false;
   const deck = [...g.players];
   for (let i = deck.length - 1; i > 0; i--) {
-    const j = Math.floor(rnd() * (i + 1));
+    const j = Math.min(i, Math.floor(rnd() * (i + 1)));
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
   // With an odd number, which side gets the extra player is random too.

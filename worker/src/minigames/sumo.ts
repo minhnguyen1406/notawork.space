@@ -19,7 +19,10 @@ export const create: GameFactory = (io) => {
     for (const e of ev) {
       if (e.k === 'place') {
         const spots = sumoPlaces(g.alive.length, ring);
-        g.alive.forEach((id, i) => io.put(id, spots[i].x, spots[i].z));
+        g.alive.forEach((id, i) => {
+          // Someone sitting down is out the moment the countdown ticks: leave them in their seat.
+          if (all.get(id)?.seat === null) io.put(id, spots[i].x, spots[i].z);
+        });
         prev = new Map();
         pushed = new Set();
       } else if (e.k === 'out') {
@@ -35,7 +38,7 @@ export const create: GameFactory = (io) => {
       } else if (e.k === 'match') {
         io.emote(e.id, '🏆');
         io.notice(`${e.name} won the sumo match`);
-      } else if (e.k === 'abandon') io.notice('The sumo match was called off: not enough wrestlers left');
+      } else if (e.k === 'abandon') io.notice(e.idle ? 'The sumo match was called off: nobody is wrestling' : 'The sumo match was called off: not enough wrestlers left');
     }
   }
   const everyone = () => new Map(io.players().map((p) => [p.id, p]));
@@ -76,7 +79,9 @@ export const create: GameFactory = (io) => {
       const here = new Map<string, { x: number; z: number }>();
       for (const id of g.alive) {
         const p = all.get(id);
-        if (!p) continue;
+        // On the tick the bout starts, someone may be standing outside the ring: they are about to be
+        // out, and are not shoved about wherever on the roof they are.
+        if (!p || !(Math.hypot(p.x - ring.x, p.z - ring.z) <= ring.r)) continue;
         const was = prev.get(id) ?? p;
         movers[id] = { x: p.x, z: p.z, px: was.x, pz: was.z };
         here.set(id, { x: p.x, z: p.z });

@@ -19,7 +19,7 @@ export const ASK_MS = 15_000;
 /** You must be this close to challenge someone, and stay this close during the duel. */
 export const DUEL_REACH = 4.5;
 export const DUEL_LEASH = 9;
-const MAX_ROUNDS = 15;
+export const MAX_ROUNDS = 15;
 
 export interface Fighter {
   id: string;
@@ -67,7 +67,7 @@ export function duelPick(d: Duel, pid: string, move: unknown): boolean {
 
 /** Someone walked off, sat down or disconnected: the other fighter wins. */
 export function duelForfeit(d: Duel, pid: string, now: number) {
-  if (d.phase === 'over') return;
+  if (d.phase === 'over' || (d.a.id !== pid && d.b.id !== pid)) return;
   d.phase = 'over';
   d.winner = d.a.id === pid ? d.b.id : d.a.id;
   d.until = now + REVEAL_MS;
@@ -75,6 +75,7 @@ export function duelForfeit(d: Duel, pid: string, now: number) {
 
 /** Move the duel on if its clock has run out or both moves are in. Returns true if anything changed. */
 export function duelTick(d: Duel, now: number): boolean {
+  if (!Number.isFinite(now)) return false; // a broken clock must not end a round or freeze the reveal
   if (d.phase === 'pick') {
     if (now < d.until && !(d.a.pick && d.b.pick)) return false;
     const w = roundWinner(d.a.pick, d.b.pick);

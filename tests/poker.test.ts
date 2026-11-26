@@ -1,16 +1,26 @@
 // Hand ranking, betting flow and side pots.
 import { expect, test } from 'vitest';
+import { SKIP_AFTER_MS } from '../shared/cards';
 import {
   BIG_BLIND,
   compareScores,
   newPoker,
-  pokerAct,
-  pokerLeave,
-  pokerStart,
+  pokerAct as act,
+  pokerLeave as leave,
+  pokerSkip,
+  pokerSkipIn,
+  pokerStart as start,
   potOf,
+  raiseRange,
   scoreHand,
+  type PokerAction,
   type PokerGame,
 } from '../shared/poker';
+
+// The older checks below do not care about time: they all happen at the same instant.
+const pokerStart = (g: PokerGame, who: { id: string; name: string }[]) => start(g, who, 0);
+const pokerAct = (g: PokerGame, pid: string, a: PokerAction) => act(g, pid, a, 0);
+const pokerLeave = (g: PokerGame, pid: string) => leave(g, pid, 0);
 
 // Each check becomes its own named test.
 const check = (label: string, ok: boolean) => test(label, () => expect(ok).toBe(true));
@@ -189,4 +199,165 @@ test("a bet left behind by someone who walks out still goes to the winners", () 
   expect(pokerAct(g, 'ann', { k: 'fold' })).toBe(true);
   expect(g.phase).toBe('showdown');
   expect(total(g)).toBe(before);
+});
+
+// ------------------------------------------------------------ skipping a player who has wandered off
+
+const T0 = 5_000_000;
+const everyone = ['ann', 'bao', 'chi'];
+
+test('skip: refused until the turn has lasted 40 seconds, then allowed for anyone else at the table', () => {
+  const g = newPoker();
+  start(g, players(3), T0); // Ann is first to act and owes the big blind
+  expect(SKIP_AFTER_MS).toBe(40_000);
+  expect(g.turnSince).toBe(T0);
+  expect(pokerSkipIn(g, T0)).toBe(40_000);
+  expect(pokerSkipIn(g, T0 + 15_000)).toBe(25_000);
+  expect(pokerSkip(g, 'bao', T0, everyone)).toBe(false);
+  expect(pokerSkip(g, 'bao', T0 + 39_999, everyone)).toBe(false);
+  expect(pokerSkipIn(g, T0 + 39_999)).toBe(1);
+  expect(g.seats[0].folded).toBe(false);
+  expect(pokerSkipIn(g, T0 + 40_000)).toBe(0);
+  expect(pokerSkip(g, 'bao', T0 + 40_000, everyone)).toBe(true);
+  // Ann was facing a bet, so she is folded; she keeps her seat and her chips.
+  expect(g.seats[0]).toMatchObject({ id: 'ann', folded: true, chips: 1000 });
+  expect(cur(g)).toBe('bao');
+  // The clock starts again for the next player.
+  expect(g.turnSince).toBe(T0 + 40_000);
+  expect(pokerSkipIn(g, T0 + 41_000)).toBe(39_000);
+  expect(pokerSkip(g, 'chi', T0 + 41_000, everyone)).toBe(false);
+});
+
+test('skip: checks when checking is free, folds only when there is a bet to answer', () => {
+  const g = newPoker();
+  start(g, players(3), T0);
+  act(g, 'ann', { k: 'call' }, T0 + 1000);
+  act(g, 'bao', { k: 'call' }, T0 + 2000);
+  // Chi is the big blind with nothing to call: a skip is a check, and the flop comes.
+  expect(g.turnSince).toBe(T0 + 2000);
+  expect(pokerSkip(g, 'ann', T0 + 41_999, everyone)).toBe(false);
+  expect(pokerSkip(g, 'ann', T0 + 42_000, everyone)).toBe(true);
+  expect(g.seats[2]).toMatchObject({ id: 'chi', folded: false, chips: 980 });
+  expect(g.phase).toBe('flop');
+  expect(cur(g)).toBe('bao');
+  // Bao bets; Chi, still away, is skipped again and this time folds.
+  act(g, 'bao', { k: 'raise', to: 40 }, T0 + 50_000);
+  expect(cur(g)).toBe('chi');
+  expect(pokerSkip(g, 'bao', T0 + 90_000, everyone)).toBe(true);
+  expect(g.seats[2].folded).toBe(true);
+  expect(g.phase).toBe('flop');
+  expect(cur(g)).toBe('ann');
+  expect(total(g)).toBe(3000);
+});
+
+test('skip: refused from the player themself, from someone not at the table, and when it is nobody\'s turn', () => {
+  const g = newPoker();
+  const late = T0 + 10 * SKIP_AFTER_MS;
+  expect(pokerSkip(g, 'bao', late, everyone)).toBe(false); // no hand yet
+  expect(pokerSkipIn(g, late)).toBe(0);
+  start(g, players(3), T0);
+  const before = JSON.stringify(g);
+  expect(pokerSkip(g, 'ann', late, everyone)).toBe(false); // it is Ann's own turn
+  expect(pokerSkip(g, 'dung', late, everyone)).toBe(false); // not sitting here
+  expect(pokerSkip(g, 'bao', late, ['ann', 'chi'])).toBe(false); // dealt in, but has stood up
+  expect(pokerSkip(g, 'bao', NaN, everyone)).toBe(false);
+  expect(JSON.stringify(g)).toBe(before);
+  // Someone who sat down mid-hand and is waiting for the next one may skip.
+  expect(pokerSkip(g, 'dung', late, [...everyone, 'dung'])).toBe(true);
+  leave(g, 'bao', late);
+  expect(g.phase).toBe('showdown');
+  expect(pokerSkip(g, 'chi', late * 2, everyone)).toBe(false); // the hand is over
+  expect(pokerSkipIn(g, late * 2)).toBe(0);
+});
+
+test('skip: the wait restarts when the player to act leaves, but not when somebody else does', () => {
+  const g = newPoker();
+  start(g, players(4), T0); // Dung is first to act four-handed
+  expect(cur(g)).toBe('dung');
+  leave(g, 'bao', T0 + 30_000);
+  expect(g.turnSince).toBe(T0);
+  expect(pokerSkipIn(g, T0 + 30_000)).toBe(10_000);
+  leave(g, 'dung', T0 + 35_000);
+  expect(cur(g)).toBe('ann');
+  expect(g.turnSince).toBe(T0 + 35_000);
+  expect(pokerSkip(g, 'chi', T0 + 40_000, ['ann', 'chi'])).toBe(false);
+  expect(pokerSkip(g, 'chi', T0 + 75_000, ['ann', 'chi'])).toBe(true);
+});
+
+// ------------------------------------------------------------ bugs found by the simulation (tests/sim/poker.sim.test.ts)
+
+test('regression: when everyone else is all-in and there is nothing to call, the board runs out without asking for a check', () => {
+  const g = newPoker();
+  Object.assign(g.bank, { ann: 20, bao: 1000 });
+  pokerStart(g, players(2)); // Ann has the button and the small blind
+  expect(cur(g)).toBe('ann');
+  expect(pokerAct(g, 'ann', { k: 'call' })).toBe(true); // all-in for her last 10
+  // Bao has matched the bet and nobody is left to bet against: no pointless "check" turn.
+  expect(g.phase).toBe('showdown');
+  expect(g.shown).toBe(true);
+  expect(g.board.length).toBe(5);
+  expect(total(g)).toBe(1020);
+});
+
+test('regression: someone else walking out can leave the player to act with nobody to bet against; the hand moves on', () => {
+  const g = newPoker();
+  Object.assign(g.bank, { ann: 20, bao: 1000, chi: 1000 });
+  pokerStart(g, players(3));
+  pokerAct(g, 'ann', { k: 'call' }); // all-in
+  pokerAct(g, 'bao', { k: 'call' });
+  expect(cur(g)).toBe('chi'); // the big blind's option
+  pokerLeave(g, 'bao');
+  // Only Chi has chips, and she owes nothing: straight to the showdown against Ann.
+  expect(g.phase).toBe('showdown');
+  expect(g.board.length).toBe(5);
+  expect(total(g)).toBe(2020);
+});
+
+test('regression: an all-in for less than a full raise does not let players who already acted raise again', () => {
+  const g = newPoker();
+  Object.assign(g.bank, { ann: 1000, bao: 1000, chi: 70 });
+  pokerStart(g, players(3));
+  pokerAct(g, 'ann', { k: 'raise', to: 60 }); // a raise of 40
+  pokerAct(g, 'bao', { k: 'call' });
+  expect(pokerAct(g, 'chi', { k: 'raise', to: 70 })).toBe(true); // all-in, only 10 more
+  expect(cur(g)).toBe('ann');
+  expect(raiseRange(g, g.seats[0])).toBe(null);
+  expect(pokerAct(g, 'ann', { k: 'raise', to: 110 })).toBe(false);
+  expect(pokerAct(g, 'ann', { k: 'raise', to: 1000 })).toBe(false);
+  expect(pokerAct(g, 'ann', { k: 'call' })).toBe(true);
+  expect(pokerAct(g, 'bao', { k: 'raise', to: 200 })).toBe(false);
+  expect(pokerAct(g, 'bao', { k: 'call' })).toBe(true);
+  expect(g.phase).toBe('flop');
+});
+
+test('a full all-in raise, or short all-ins adding up to one, does reopen the betting', () => {
+  const g = newPoker();
+  Object.assign(g.bank, { ann: 1000, bao: 1000, chi: 200 });
+  pokerStart(g, players(3));
+  pokerAct(g, 'ann', { k: 'raise', to: 60 });
+  pokerAct(g, 'bao', { k: 'call' });
+  pokerAct(g, 'chi', { k: 'raise', to: 200 }); // all-in, 140 more: a full raise
+  expect(raiseRange(g, g.seats[0])).toEqual({ min: 340, max: 1000 });
+  expect(pokerAct(g, 'ann', { k: 'raise', to: 340 })).toBe(true);
+
+  const h = newPoker();
+  Object.assign(h.bank, { ann: 1000, bao: 80, chi: 100 });
+  pokerStart(h, players(3));
+  pokerAct(h, 'ann', { k: 'raise', to: 60 }); // a raise of 40
+  expect(pokerAct(h, 'bao', { k: 'raise', to: 80 })).toBe(true); // all-in, 20 more
+  expect(pokerAct(h, 'chi', { k: 'raise', to: 100 })).toBe(true); // all-in, 20 more again
+  // Ann now faces 40 more than she bet, which is a full raise.
+  expect(raiseRange(h, h.seats[0])).toEqual({ min: 140, max: 1000 });
+});
+
+test('regression: garbage actions are refused instead of throwing or being read as numbers', () => {
+  const g = newPoker();
+  pokerStart(g, players(3));
+  const before = JSON.stringify(g);
+  for (const bad of [null, undefined, 7, 'fold', {}, { k: 'deal' }, { k: 'skip' }, { k: 'raise' }, { k: 'raise', to: '60' }, { k: 'raise', to: NaN }, { k: 'raise', to: Infinity }]) {
+    expect(pokerAct(g, 'ann', bad as unknown as PokerAction)).toBe(false);
+  }
+  expect(JSON.stringify(g)).toBe(before);
+  const h = newPoker();
+  expect(pokerStart(h, [players(2)[0], players(2)[0]])).toBe(false); // the same person twice
 });

@@ -266,3 +266,42 @@ test('the view counts down the time left', () => {
   expect(drawView(g, TURN_MS * 2).left).toBe(0);
   expect(drawView(newDraw(), 5).left).toBe(0);
 });
+
+// Found by tests/sim/draw.sim.test.ts. Leaving used to wipe "has guessed", so a guesser could leave, rejoin and
+// guess the same word again: 25 more points for the drawer every time, and the chance to type the word
+// they already knew into the guess list as a "wrong" guess for everyone to read.
+test('someone who has guessed the word cannot leave, come back and guess it again', () => {
+  const g = three();
+  const word = g.word!;
+  expect(drawGuess(g, 'b', word, 1000)).toBe('right');
+  expect(score(g, 'a')).toBe(DRAWER_POINTS);
+  expect(drawLeave(g, 'b', 2000)).toBe(true);
+  expect(g.phase).toBe('turn'); // Chi is still guessing
+  expect(drawView(g, 2000).guessed).toEqual([]); // the view lists only people who are playing
+  expect(drawJoin(g, bao)).toBe(true);
+  expect(drawGuess(g, 'b', word, 3000)).toBe('no');
+  expect(drawGuess(g, 'b', `it is ${word}`, 4000)).toBe('no');
+  expect(score(g, 'a')).toBe(DRAWER_POINTS);
+  expect(g.feed.some((f) => f.text?.includes(word))).toBe(false);
+  expect(drawView(g, 4000).guessed).toEqual(['b']);
+  // They still count as having got it, so the turn ends when Chi does too.
+  expect(drawGuess(g, 'c', word, 5000)).toBe('right');
+  expect(g.phase).toBe('reveal');
+  expect(score(g, 'a')).toBe(2 * DRAWER_POINTS);
+  // The next turn is a new word: they guess like anyone else.
+  drawTick(g, 5000 + REVEAL_MS, () => 0);
+  expect(g.drawer).toBe('c');
+  expect(drawGuess(g, 'b', g.word, 5000 + REVEAL_MS + 1000)).toBe('right');
+});
+
+// Found by tests/sim/draw.sim.test.ts. `every` skips the holes of a sparse array, so one got through and was
+// stored and relayed as points. JSON cannot carry a hole, so no browser could send this; refused all the same.
+test('points with holes in the list are refused', () => {
+  const g = three();
+  expect(drawInk(g, 'a', { n: true, c: 0, w: 0, pts: new Array(4) }, 0)).toBeNull();
+  const holed = [0.5, 0.5, 0.5, 0.5];
+  delete holed[2];
+  expect(drawInk(g, 'a', { n: true, c: 0, w: 0, pts: holed }, 0)).toBeNull();
+  expect(g.strokes).toEqual([]);
+  expect(g.ink).toBe(0);
+});

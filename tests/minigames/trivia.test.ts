@@ -290,36 +290,69 @@ test('twenty players can play a whole game', () => {
   expect(score(g, 'p0')).toBe(0);
 });
 
-test('the server broadcasts no answers while a question is open, and tells only me my choice', async () => {
+/** A server with everything it sends recorded. */
+async function recordedServer() {
   const { create } = await import('../../worker/src/minigames/trivia');
   const casts: any[] = [];
   const sends: { id: string; v: any }[] = [];
   const notices: string[] = [];
   const io = { players: () => [], send: (id: string, v: unknown) => sends.push({ id, v }), broadcast: (v: unknown) => casts.push(v), notice: (t: string) => notices.push(t), emote() {}, put() {}, nudge() {}, resetBall() {}, setScore() {} };
-  const s = create(io as any);
+  return { s: create(io as any), casts, sends, notices };
+}
+/** Where the right answer sits in a broadcast question. Worked out from the bank, so the test does not depend on how the server shuffled. */
+const rightIn = (v: any): number => v.options.indexOf(QUESTIONS.find((q) => q[1] === v.question)![2]);
+
+// This test used to answer with fixed option numbers, so whether anybody scored (and so which notice the
+// server sent) depended on the server's own Math.random shuffle. It now reads the question to answer right or wrong on purpose.
+test('the server broadcasts no answers while a question is open, and tells only me my choice', async () => {
+  const { s, casts, sends, notices } = await recordedServer();
   const A = { ...ann } as any;
   const B = { ...bao } as any;
   s.onAction(A, { k: 'join' }, 0);
   s.onAction(B, { k: 'join' }, 0);
   s.onAction(A, { k: 'start' }, 0);
-  s.onAction(A, { k: 'answer', choice: 2 }, 1000);
-  s.onAction(A, { k: 'answer', choice: 3 }, 1500); // ignored: no changing
+  const right = rightIn(casts.at(-1));
+  const wrongOne = (right + 1) % 4;
+  s.onAction(A, { k: 'answer', choice: right }, 1000);
+  s.onAction(A, { k: 'answer', choice: wrongOne }, 1500); // ignored: no changing
   for (const v of casts) {
     expect(v).not.toHaveProperty('mine');
-    if (v.phase === 'question') expect(v).not.toHaveProperty('correct');
+    if (v.phase === 'question') {
+      expect(v).not.toHaveProperty('correct');
+      expect(v).not.toHaveProperty('picks');
+      expect(v).not.toHaveProperty('gained');
+      // Scores only move at the reveal, so they cannot give the answer away either.
+      expect(v.players.every((p: any) => p.score === 0)).toBe(true);
+    }
   }
   expect(sends).toHaveLength(1);
-  expect(sends[0]).toMatchObject({ id: 'a', v: { mine: 2, phase: 'question' } });
+  expect(sends[0]).toMatchObject({ id: 'a', v: { mine: right, phase: 'question' } });
   expect(sends[0].v).not.toHaveProperty('correct');
-  s.onAction(B, { k: 'answer', choice: 0 }, 2000);
+  s.onAction(B, { k: 'answer', choice: wrongOne }, 2000);
   const last = casts.at(-1);
   expect(last.phase).toBe('reveal');
-  expect(last.picks).toEqual({ a: 2, b: 0 });
+  expect(last.correct).toBe(right);
+  expect(last.picks).toEqual({ a: right, b: wrongOne });
+  expect(last.gained).toEqual({ a: pointsFor(QUESTION_MS - 1000), b: 0 });
   // Play it out on the clock alone: the game finishes, announces, and returns to the lobby.
   for (let now = 2000; now < 400_000 && casts.at(-1).phase !== 'final'; now += 100) s.tick!(now);
   expect(casts.at(-1).phase).toBe('final');
-  expect(notices.some((n) => n.includes('trivia night') && !n.includes('started'))).toBe(true);
+  expect(casts.at(-1).winners).toEqual(['a']);
+  expect(notices).toContain(`Ann won trivia night with ${pointsFor(QUESTION_MS - 1000)} points`);
   s.onLeave('a', 400_000);
   s.onLeave('b', 400_000);
   expect(casts.at(-1)).toMatchObject({ phase: 'lobby', players: [] });
+});
+
+test('the server announces a game that nobody scored in', async () => {
+  const { s, casts, notices } = await recordedServer();
+  s.onAction({ ...ann } as any, { k: 'join' }, 0);
+  s.onAction({ ...bao } as any, { k: 'join' }, 0);
+  s.onAction({ ...ann } as any, { k: 'start' }, 0);
+  const right = rightIn(casts.at(-1));
+  s.onAction({ ...ann } as any, { k: 'answer', choice: (right + 1) % 4 }, 1000);
+  s.onAction({ ...bao } as any, { k: 'answer', choice: (right + 2) % 4 }, 2000);
+  for (let now = 2000; now < 400_000 && casts.at(-1).phase !== 'final'; now += 100) s.tick!(now);
+  expect(casts.at(-1)).toMatchObject({ phase: 'final', winners: [] });
+  expect(notices).toContain('Trivia night ended with nobody on the board');
 });

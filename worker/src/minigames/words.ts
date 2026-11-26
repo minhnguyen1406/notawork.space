@@ -14,10 +14,10 @@ export const create: GameFactory = (io) => {
     for (const p of g.players) if (p.giver) io.send(p.id, wordsView(g, now, p.id));
   };
   /** Publish a change, announcing the result if it ended the game. */
-  const changed = (wasPlaying: boolean, now: number) => {
+  const changed = (wasPlaying: boolean, now: number, timedOut = false) => {
     if (wasPlaying && g.phase === 'lobby' && g.result) {
       const { winner, reason } = g.result;
-      if (!winner) io.notice('Word clues stopped: a team ran short of players');
+      if (!winner) io.notice(timedOut ? 'Word clues stopped: nobody was playing' : 'Word clues stopped: a team ran short of players');
       else io.notice(`${winner === 'red' ? 'Red' : 'Blue'} team won at word clues${reason === 'trap' ? ' (the other team hit the trap)' : ''}`);
     }
     publish(now);
@@ -47,7 +47,9 @@ export const create: GameFactory = (io) => {
       if (g.players.length) io.send(p.id, wordsView(g, now));
     },
     tick(now) {
-      if (wordsTick(g, now)) publish(now);
+      // A tick can end the game too: one that everyone has walked away from is abandoned.
+      const playing = g.phase !== 'lobby';
+      if (wordsTick(g, now)) changed(playing, now, true);
     },
   };
 };

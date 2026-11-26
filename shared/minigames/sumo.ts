@@ -9,6 +9,8 @@ export const SUMO_WINS = 2;
 export const COUNTDOWN_MS = 3_000;
 /** A round that lasts this long goes to whoever is nearest the centre. */
 export const ROUND_MS = 60_000;
+/** This many rounds in a row that nobody wins (everyone sat down or wandered off) and the match is called off. */
+export const SUMO_BLANKS = 3;
 /** How long a round's result stays up before the next round. */
 export const RESULT_MS = 3_000;
 /** Two players closer than this are touching, and get pushed apart. */
@@ -37,6 +39,9 @@ export interface Mover {
   pz: number;
 }
 
+/** A closing speed for the sums below: never negative, and never NaN or infinite. */
+const speed = (v: number) => (Number.isFinite(v) ? Math.max(0, v) : 0);
+
 /**
  * The push between two players this tick, or null if they are not touching. Each is moved away
  * from the other. The overlap is split by how fast each was closing in, so the one charging
@@ -47,13 +52,15 @@ export function sumoPush(a: Mover, b: Mover): { a: Vec; b: Vec } | null {
   let nx = b.x - a.x;
   let nz = b.z - a.z;
   const d = Math.hypot(nx, nz);
-  if (d >= SUMO_REACH) return null;
+  // Written as "not within reach" so that a position that is not a number touches nobody.
+  if (!(d < SUMO_REACH)) return null;
   // Standing on exactly the same spot: any direction will do, as long as it is always the same.
   if (d < 1e-6) [nx, nz] = [1, 0];
   else [nx, nz] = [nx / d, nz / d];
   // Metres each moved towards the other since the last tick. Backing away counts as nothing.
-  const va = Math.max(0, (a.x - a.px) * nx + (a.z - a.pz) * nz);
-  const vb = Math.max(0, -((b.x - b.px) * nx + (b.z - b.pz) * nz));
+  // A speed that is not a number (no sane last position) counts as standing still.
+  const va = speed((a.x - a.px) * nx + (a.z - a.pz) * nz);
+  const vb = speed(-((b.x - b.px) * nx + (b.z - b.pz) * nz));
   const overlap = SUMO_REACH - d;
   const shareA = (va + REST) / (va + vb + 2 * REST);
   const onB = Math.min(PUSH_CAP, overlap * shareA + Math.max(0, va - vb) * CARRY);
@@ -95,7 +102,8 @@ export function sumoPlaces(n: number, ring: Ring = GAME_ZONES.sumo): { x: number
 /** A spot just outside the ring, straight out from the centre through (x, z). */
 export function sumoOutside(x: number, z: number, ring: Ring = GAME_ZONES.sumo): { x: number; z: number } {
   const d = Math.hypot(x - ring.x, z - ring.z);
-  const [nx, nz] = d < 1e-6 ? [1, 0] : [(x - ring.x) / d, (z - ring.z) / d];
+  // From the centre, or from nowhere at all (not a number): any direction will do.
+  const [nx, nz] = !Number.isFinite(d) || d < 1e-6 ? [1, 0] : [(x - ring.x) / d, (z - ring.z) / d];
   return { x: ring.x + nx * (ring.r + 1.2), z: ring.z + nz * (ring.r + 1.2) };
 }
 
@@ -115,6 +123,8 @@ export interface SumoGame {
   last: string | null;
   /** Who won the last match, kept for the lobby to show. */
   champion: { id: string; name: string } | null;
+  /** How many rounds in a row nobody has won. */
+  blanks: number;
 }
 
 /** Things that happened, for the server to act on (move people, show reactions, announce). */
@@ -124,9 +134,9 @@ export type SumoEvent =
   | { k: 'out'; id: string }
   | { k: 'round'; id: string | null; timeout: boolean }
   | { k: 'match'; id: string; name: string }
-  | { k: 'abandon' }; // too few players left to carry on
+  | { k: 'abandon'; idle?: boolean }; // too few players left to carry on, or (`idle`) nobody is wrestling
 
-export const newSumo = (): SumoGame => ({ players: [], phase: 'lobby', alive: [], wins: {}, round: 0, until: 0, last: null, champion: null });
+export const newSumo = (): SumoGame => ({ players: [], phase: 'lobby', alive: [], wins: {}, round: 0, until: 0, last: null, champion: null, blanks: 0 });
 
 /** Joining is only possible between matches. */
 export function sumoJoin(g: SumoGame, p: { id: string; name: string }): boolean {
@@ -155,10 +165,15 @@ function endRound(g: SumoGame, winner: string | null, timeout: boolean, now: num
   ev.push({ k: 'round', id: winner, timeout });
   const who = g.players.find((p) => p.id === winner);
   if (who) g.wins[who.id] = (g.wins[who.id] ?? 0) + 1;
+  g.blanks = who ? 0 : g.blanks + 1;
   if (who && g.wins[who.id] >= SUMO_WINS) {
     g.champion = { id: who.id, name: who.name };
     toLobby(g);
     ev.push({ k: 'match', id: who.id, name: who.name });
+  } else if (g.blanks >= SUMO_BLANKS) {
+    // Everyone signed up is sitting down or gone: without this the rounds would go round for ever.
+    toLobby(g);
+    ev.push({ k: 'abandon', idle: true });
   } else {
     g.phase = 'result';
     g.until = now + RESULT_MS;
@@ -172,6 +187,7 @@ export function sumoStart(g: SumoGame, by: string, now: number): SumoEvent[] {
   g.round = 0;
   g.last = null;
   g.champion = null;
+  g.blanks = 0;
   const ev: SumoEvent[] = [];
   beginRound(g, now, ev);
   return ev;
@@ -199,7 +215,8 @@ const nearest = (ids: string[], where: (id: string) => { x: number; z: number } 
   let bestD = Infinity;
   for (const id of ids) {
     const p = where(id);
-    const d = p ? Math.hypot(p.x - ring.x, p.z - ring.z) : Infinity;
+    const far = p ? Math.hypot(p.x - ring.x, p.z - ring.z) : Infinity;
+    const d = Number.isNaN(far) ? Infinity : far;
     if (best === null || d < bestD) [best, bestD] = [id, d];
   }
   return best;
@@ -224,7 +241,8 @@ export function sumoTick(
   // During the countdown people are rooted, so only giving up (sitting, leaving) counts.
   const out = g.alive.filter((id) => {
     const p = where(id);
-    return !p || !!p.seat || (g.phase === 'bout' && Math.hypot(p.x - ring.x, p.z - ring.z) > ring.r);
+    // "Not inside" rather than "outside", so that a position that is not a number is out too.
+    return !p || !!p.seat || (g.phase === 'bout' && !(Math.hypot(p.x - ring.x, p.z - ring.z) <= ring.r));
   });
   if (out.length) {
     for (const id of out) ev.push({ k: 'out', id });

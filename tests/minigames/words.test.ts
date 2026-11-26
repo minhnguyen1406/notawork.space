@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import {
-  CLUE_MS, GUESS_MS, WORD_LIST, WORDS_MAX, clueProblem, newWords, otherTeam, wordsClue, wordsEndTurn, wordsGuess, wordsJoin, wordsLeave,
+  CLUE_MS, GUESS_MS, IDLE_TURNS, WORD_LIST, WORDS_MAX, clueProblem, newWords, otherTeam, wordsClue, wordsEndTurn, wordsGuess, wordsJoin, wordsLeave,
   wordsLeft, wordsReady, wordsStart, wordsSwitch, wordsTick, wordsView, wordsVolunteer, type Kind, type Team, type WordsGame, type WordsView,
 } from '../../shared/minigames/words';
 import { create } from '../../worker/src/minigames/words';
@@ -426,4 +426,51 @@ test('the server promotes a guesser when a clue-giver leaves, sends them the map
   expect(end).toMatchObject({ phase: 'lobby', result: { winner: otherTeam(turn), reason: 'trap' } });
   expect(end.cells.map((c) => c.kind)).toEqual(map); // the whole map, for everyone
   expect(notices).toEqual([`${otherTeam(turn) === 'red' ? 'Red' : 'Blue'} team won at word clues (the other team hit the trap)`]);
+});
+
+// Found by tests/sim/words.sim.test.ts: with everyone idle the turn used to pass back and forth for ever,
+// and since nobody can join mid-game the table was held until all four left the room.
+test('a game everyone has walked away from is abandoned after four timed-out turns in a row', () => {
+  const g = started();
+  let now = 0;
+  for (let i = 0; i < IDLE_TURNS - 1; i++) {
+    now = g.until;
+    expect(wordsTick(g, now)).toBe(true);
+    expect(g.phase).toBe('clue');
+  }
+  // A clue or a guess shows someone is there, and starts the count again.
+  expect(wordsClue(g, giver(g, g.turn), 'zzz', 1, now)).toBe(true);
+  for (let i = 0; i < IDLE_TURNS - 1; i++) {
+    now = g.until;
+    expect(wordsTick(g, now)).toBe(true);
+    expect(g.phase).not.toBe('lobby');
+  }
+  wordsClue(g, giver(g, g.turn), 'zzz', 1, now);
+  expect(wordsGuess(g, guesser(g, g.turn), card(g, 'neutral'), now)).toBe('neutral');
+  for (let i = 0; i < IDLE_TURNS; i++) {
+    expect(g.phase).not.toBe('lobby');
+    now = g.until;
+    expect(wordsTick(g, now)).toBe(true);
+  }
+  expect(g.phase).toBe('lobby');
+  expect(g.result).toEqual({ winner: null, reason: 'short' });
+  expect(wordsTick(g, now + 1e9)).toBe(false);
+  // The table is free again: someone new can join and a fresh game can start.
+  expect(wordsJoin(g, people[4])).toBe(true);
+  expect(wordsStart(g, 'e', now, seeded(3))).toBe(true);
+  expect(g.idle).toBe(0);
+});
+
+test('the server says so when it abandons an idle game, and shows everyone the map', () => {
+  const cast: WordsView[] = [];
+  const notices: string[] = [];
+  const io: GameIO = { players: () => [], send() {}, broadcast: (view) => cast.push(view as WordsView), notice: (text) => notices.push(text), emote() {}, put() {}, nudge() {}, resetBall() {}, setScore() {} };
+  const s = create(io);
+  const info = (id: string) => ({ id, name: id.toUpperCase(), color: '#fff', look: 'x', x: 0, z: 0, ry: 0, seat: null }) as PlayerInfo;
+  for (const id of ['a', 'b', 'c', 'd']) s.onAction(info(id), { k: 'join' }, 0);
+  s.onAction(info('a'), { k: 'start' }, 0);
+  for (let now = 0; now <= IDLE_TURNS * CLUE_MS; now += 100) s.tick!(now);
+  expect(cast.at(-1)).toMatchObject({ phase: 'lobby', result: { winner: null, reason: 'short' } });
+  expect(cast.at(-1)!.cells.every((c) => c.kind !== null)).toBe(true);
+  expect(notices).toEqual(['Word clues stopped: nobody was playing']);
 });

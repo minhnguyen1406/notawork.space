@@ -1,0 +1,141 @@
+/* The panel at the signpost. */
+.mg-tube .mg-tube-link {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 233, 201, 0.08);
+  color: var(--text);
+  font: inherit;
+}
+.mg-tube .mg-tube-seek {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mg-tube .mg-tube-seek input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent-2);
+}
+.mg-tube .mg-tube-now {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  font-size: 14px;
+}
+.mg-tube .mg-tube-now li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mg-tube .mg-tube-now b {
+  color: var(--accent-2);
+}
+
+/* The floating window everyone gets while a video is on. It sits beside the panels, not inside one. */
+.mg-tube-player {
+  pointer-events: auto;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, calc(100vw - 24px));
+  background: rgba(20, 15, 26, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+  overflow: hidden;
+}
+/* About four fifths of the window, without the picture growing taller than the screen. */
+.mg-tube-player.large {
+  width: min(80vw, calc((80vh - 44px) * 16 / 9));
+}
+.mg-tube-player.moved {
+  transform: none;
+}
+.mg-tube-player[hidden],
+.mg-tube-chip[hidden] {
+  display: none;
+}
+.mg-tube-player .mg-tube-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 12px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  font-size: 13px;
+}
+.mg-tube-player .mg-tube-bar:active {
+  cursor: grabbing;
+}
+.mg-tube-player .mg-tube-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-weight: 700;
+}
+.mg-tube-player button {
+  padding: 3px 9px;
+  font-size: 12px;
+  backdrop-filter: none;
+}
+.mg-tube-player .mg-tube-vol {
+  width: 72px;
+  accent-color: var(--accent-2);
+}
+.mg-tube-player .mg-tube-screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+.mg-tube-player .mg-tube-screen iframe,
+.mg-tube-player .mg-tube-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+/* While the title bar is being dragged the frame must not swallow the pointer. */
+.mg-tube-player.dragging iframe {
+  pointer-events: none;
+}
+.mg-tube-player .mg-tube-over {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+  background: rgba(10, 8, 14, 0.82);
+}
+.mg-tube-player .mg-tube-over[hidden] {
+  display: none;
+}
+.mg-tube-player .mg-tube-over button {
+  padding: 10px 18px;
+  font-size: 15px;
+}
+.mg-tube-chip {
+  pointer-events: auto;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  font-size: 12px;
+  border-radius: 999px;
+}

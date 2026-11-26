@@ -137,8 +137,9 @@ export function hideTick(g: HideGame, now: number, spots: HideSpot[]): HideEvent
   if (!seeker) return ev;
   for (const p of hideHidden(g)) {
     const s = at.get(p.id)!;
-    // Sitting down is giving up: a seat is not a hiding place.
-    if (s.seat === null && Math.hypot(s.x - seeker.x, s.z - seeker.z) > FIND_RADIUS) continue;
+    // Sitting down is giving up: a seat is not a hiding place. Written as "not within reach" so that a
+    // position that is not a number counts as out of reach rather than found.
+    if (s.seat === null && !(Math.hypot(s.x - seeker.x, s.z - seeker.z) <= FIND_RADIUS)) continue;
     g.found.push(p.id);
     g.lastFound = p.name;
     ev.found.push(p.id);

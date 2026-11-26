@@ -266,3 +266,43 @@ test('a jammed player still misses their turn when it reaches them because someo
   expect(g.skip.bao).toBe(false);
   expect(g.phase).toBe('roll');
 });
+
+// ---- regressions found by tests/sim/property.sim.test.ts
+
+test('regression: when everyone is stuck in traffic at once, each jam still costs exactly one turn', () => {
+  const g = start(2);
+  landOn(g, at('Traffic jam')); // Ann is jammed
+  phoEnd(g, 'ann');
+  landOn(g, at('Traffic jam')); // and now so is Bao
+  phoEnd(g, 'bao');
+  // Ann misses her turn, Bao misses his, so it is Ann's go again (not Bao playing twice in a row).
+  expect(phoCurrent(g)).toBe('ann');
+  expect(g.skip).toEqual({ ann: false, bao: false });
+});
+
+test('regression: the turn points at the winner when the game ends because the others left', () => {
+  const g = start(3);
+  g.turn = 2; // Chi's turn
+  phoLeave(g, 'ann');
+  phoLeave(g, 'bao');
+  expect(g.phase).toBe('over');
+  expect(phoCurrent(g)).toBe('chi');
+});
+
+test('regression: only a real "yes" buys the city', () => {
+  const g = start();
+  phoRoll(g, 'ann', 1);
+  expect(phoBuy(g, 'ann', 'no' as never)).toBe(true);
+  expect(g.owner[1]).toBeUndefined();
+  expect(g.cash.ann).toBe(START_CASH);
+});
+
+test('regression: a nonsense die or lucky card is refused and changes nothing', () => {
+  const g = start();
+  const before = JSON.stringify(g);
+  for (const die of [0, 7, -1, 1.5, NaN, Infinity, '3' as never]) expect(phoRoll(g, 'ann', die)).toBe(false);
+  expect(phoRoll(g, 'ann', 3, LUCKY_COUNT)).toBe(false);
+  expect(phoRoll(g, 'ann', 3, -1)).toBe(false);
+  expect(JSON.stringify(g)).toBe(before);
+  expect(phoRoll(g, 'ann', 3, 0)).toBe(true);
+});

@@ -1,0 +1,32 @@
+/* The speaker button in the top bar: two waves for on, one for quiet, a cross for off. */
+.ft-sound {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  line-height: 0;
+}
+.ft-sound svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ft-sound .ft-sound-body {
+  fill: currentColor;
+}
+.ft-sound .ft-sound-x,
+.ft-sound[data-mode='quiet'] .ft-sound-w2,
+.ft-sound[data-mode='off'] .ft-sound-w1,
+.ft-sound[data-mode='off'] .ft-sound-w2 {
+  display: none;
+}
+.ft-sound[data-mode='off'] .ft-sound-x {
+  display: inline;
+}
+.ft-sound[data-mode='off'] {
+  color: var(--muted);
+}

@@ -178,7 +178,10 @@ function remove(g: PhoGame, pid: string) {
   }
   const wasTurn = i === g.turn;
   g.order.splice(i, 1);
-  if (g.order.length === 1) return finishWith(g, g.order[0], 'as the last player standing');
+  if (g.order.length === 1) {
+    g.turn = 0;
+    return finishWith(g, g.order[0], 'as the last player standing');
+  }
   if (i < g.turn) g.turn--;
   g.turn %= g.order.length;
   if (wasTurn) {
@@ -192,7 +195,8 @@ function remove(g: PhoGame, pid: string) {
 
 /** Move to the next player, passing over anyone stuck in traffic (which uses up their jam). */
 function passTurn(g: PhoGame) {
-  for (let n = 0; n < g.order.length; n++) {
+  // Each jam is used up as it is passed over, so this stops within two laps even if everyone is stuck.
+  for (;;) {
     g.turn = (g.turn + 1) % g.order.length;
     const next = phoCurrent(g);
     if (!g.skip[next]) break;
@@ -315,6 +319,8 @@ function land(g: PhoGame, pid: string, lucky?: number) {
 /** Roll and move. `die` and `lucky` are only passed by tests; normally both are random. */
 export function phoRoll(g: PhoGame, pid: string, die?: number, lucky?: number): boolean {
   if (g.phase !== 'roll' || phoCurrent(g) !== pid) return false;
+  if (die !== undefined && !(Number.isInteger(die) && die >= 1 && die <= 6)) return false;
+  if (lucky !== undefined && !(Number.isInteger(lucky) && lucky >= 0 && lucky < LUCKY.length)) return false;
   const roll = die ?? 1 + Math.floor(Math.random() * 6);
   g.die = roll;
   const from = g.pos[pid];
@@ -332,7 +338,7 @@ export function phoRoll(g: PhoGame, pid: string, die?: number, lucky?: number): 
 export function phoBuy(g: PhoGame, pid: string, yes: boolean): boolean {
   if (g.phase !== 'buy' || phoCurrent(g) !== pid) return false;
   const i = g.pos[pid];
-  if (yes) {
+  if (yes === true) {
     g.cash[pid] -= SPACES[i].price!;
     g.owner[i] = pid;
     say(g, `${g.names[pid]} buys ${SPACES[i].name} for ${SPACES[i].price}.`);

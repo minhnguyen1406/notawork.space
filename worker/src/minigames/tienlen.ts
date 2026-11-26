@@ -11,7 +11,9 @@ export const create: GameFactory = (io) => {
       told = g.results;
       const how = g.results?.[0]?.note?.startsWith('Tới trắng') ? ' outright (tới trắng)' : '';
       io.notice(`${g.winner.name} won the hand of Tiến lên ${VARIANT_NAMES[g.variant]}${how}`);
-      io.emote(g.winner.id, '🏆');
+      // The winner may have gone out first and then left the room before the hand ended: nobody to put a trophy over.
+      const winner = g.winner.id;
+      if (io.players().some((p) => p.id === winner)) io.emote(winner, '🏆');
     }
     for (const p of io.players()) io.send(p.id, tlView(g, p.id, now));
   };

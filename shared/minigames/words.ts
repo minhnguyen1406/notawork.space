@@ -51,6 +51,8 @@ export const DEAL = { first: 9, second: 8, neutral: 7, trap: 1 };
 export const CLUE_MS = 90_000;
 export const GUESS_MS = 120_000;
 export const CLUE_MAX_LEN = 20;
+/** This many turns in a row timing out with no clue or guess accepted means everyone has walked away: the game is abandoned. */
+export const IDLE_TURNS = 4;
 
 export type Team = 'red' | 'blue';
 /** What a card secretly is. */
@@ -84,12 +86,14 @@ export interface WordsGame {
   guesses: number;
   /** When the current phase times out (server clock). */
   until: number;
-  /** How the last game ended, shown in the lobby. `winner` is null if it was abandoned. */
+  /** Turns that have timed out in a row since the last clue or guess. */
+  idle: number;
+  /** How the last game ended, shown in the lobby. `winner` is null if it was abandoned (a team ran short, or everyone went idle). */
   result: { winner: Team | null; reason: 'all' | 'trap' | 'short' } | null;
 }
 
 export const newWords = (): WordsGame => ({
-  players: [], phase: 'lobby', grid: [], map: [], revealed: [], turn: 'red', first: 'red', clue: null, guesses: 0, until: 0, result: null,
+  players: [], phase: 'lobby', grid: [], map: [], revealed: [], turn: 'red', first: 'red', clue: null, guesses: 0, until: 0, idle: 0, result: null,
 });
 
 const find = (g: WordsGame, id: string) => g.players.find((p) => p.id === id);
@@ -159,6 +163,7 @@ export function wordsStart(g: WordsGame, by: string, now: number, rnd: () => num
   g.map = shuffle(kinds, rnd);
   g.revealed = g.map.map(() => false);
   g.result = null;
+  g.idle = 0;
   beginClue(g, now);
   return true;
 }
@@ -200,6 +205,7 @@ export function wordsClue(g: WordsGame, by: string, word: unknown, n: unknown, n
   if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 9) return false;
   if (typeof word !== 'string' || clueProblem(g.grid, word)) return false;
   g.clue = { word: word.trim().toUpperCase(), n };
+  g.idle = 0;
   g.guesses = 0;
   g.phase = 'guess';
   g.until = now + GUESS_MS;
@@ -212,6 +218,7 @@ export function wordsGuess(g: WordsGame, by: string, i: unknown, now: number): K
   if (g.phase !== 'guess' || !g.clue || !p || p.giver || p.team !== g.turn) return null;
   if (typeof i !== 'number' || !Number.isInteger(i) || i < 0 || i >= GRID || g.revealed[i]) return null;
   g.revealed[i] = true;
+  g.idle = 0;
   const k = g.map[i];
   const them = otherTeam(g.turn);
   if (k === 'trap') finish(g, them, 'trap');
@@ -245,10 +252,15 @@ export function wordsLeave(g: WordsGame, id: string): boolean {
   return true;
 }
 
-/** Time passing: an idle clue-giver or idle guessers lose the turn. Returns true if anything changed. */
+/**
+ * Time passing: an idle clue-giver or idle guessers lose the turn. Returns true if anything changed.
+ * A game nobody is playing must not hold the table for ever (nobody can join while it is on), so after
+ * IDLE_TURNS timed-out turns in a row it is abandoned, like a game a team walked out of.
+ */
 export function wordsTick(g: WordsGame, now: number): boolean {
   if (g.phase === 'lobby' || now < g.until) return false;
-  passTurn(g, now);
+  if (++g.idle >= IDLE_TURNS) finish(g, null, 'short');
+  else passTurn(g, now);
   return true;
 }
 

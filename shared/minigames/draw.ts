@@ -174,7 +174,8 @@ export function drawLeave(g: DrawGame, id: string, now: number): boolean {
   if (i < 0) return false;
   g.players.splice(i, 1);
   g.queue = g.queue.filter((x) => x !== id);
-  g.guessed = g.guessed.filter((x) => x !== id);
+  // They stay in `guessed` until the turn is over: someone who knows the word must not come straight back
+  // and guess it again (more points for the drawer each time) or type it out as a "wrong" guess.
   if (!playing(g)) return true;
   if (g.players.length < DRAW_MIN) {
     // Nobody left to play with: stop the game where it stands.
@@ -238,7 +239,11 @@ export function drawInk(g: DrawGame, by: string, a: { n?: unknown; c?: unknown; 
   if (!allow(g, by, now)) return null;
   const raw = a.pts;
   if (!Array.isArray(raw) || raw.length < 2 || raw.length % 2 || raw.length > MAX_MSG_POINTS * 2) return null;
-  if (!raw.every((v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1)) return null;
+  // An index loop, not `every`: that skips the holes of a sparse array, which would then be drawn as points.
+  for (let i = 0; i < raw.length; i++) {
+    const v: unknown = raw[i];
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1) return null;
+  }
   if (g.ink + raw.length / 2 > MAX_INK) return null;
   // Three decimal places are plenty for a picture this size and keep the messages short.
   const pts = (raw as number[]).map((v) => Math.round(v * 1000) / 1000);
@@ -329,7 +334,8 @@ export const drawView = (g: DrawGame, now: number): DrawView => ({
   turns: g.done + g.queue.length + (g.phase === 'turn' ? 1 : 0),
   left: g.phase === 'lobby' ? 0 : Math.max(0, g.until - now),
   hint: g.phase === 'turn' && g.word ? [...g.word].map((ch, i) => (g.hints.includes(i) ? ch : '_')).join('') : '',
-  guessed: g.guessed,
+  // Only people still playing: `guessed` remembers leavers too, so they cannot rejoin and guess again.
+  guessed: g.guessed.filter((id) => g.players.some((p) => p.id === id)),
   feed: g.feed,
   word: g.phase === 'reveal' ? g.word : null,
 });

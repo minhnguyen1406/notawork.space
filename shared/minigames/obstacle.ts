@@ -75,7 +75,9 @@ export interface Box {
  * A pure function, so every browser and the server agree on it.
  */
 export function barrierAt(b: Barrier, t: number): Box {
-  const off = b.amp * Math.sin(2 * Math.PI * (t / b.period + b.phase));
+  // A time that is not a number (or too big to be an angle) is shown as the start of the trip, not as a barrier that is nowhere.
+  const turn = 2 * Math.PI * (t / b.period + b.phase);
+  const off = b.amp * Math.sin(Number.isFinite(turn) ? turn : 2 * Math.PI * b.phase);
   return { x: b.axis === 'x' ? b.x + off : b.x, z: b.axis === 'z' ? b.z + off : b.z, hw: b.hw, hd: b.hd };
 }
 

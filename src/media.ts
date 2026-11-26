@@ -31,6 +31,8 @@ export interface MediaHooks {
   lost(): void;
 }
 
+export type ShareQuality = 'standard' | 'sharp';
+
 const HEAR_RANGE = 12; // beyond this you neither hear nor see someone
 const FULL_VOLUME_RANGE = 3;
 const MAX_VIDEOS = 8;
@@ -64,6 +66,10 @@ export class Media {
   private screenOwner: string | null = null;
   /** 0 to 1. Set by the game from how close you are to the cinema screen. */
   screenVolume = 0;
+  /** What the next share I start is sent as: 'standard' is 720p, 'sharp' is 1080p at about 2.5× the data. */
+  shareQuality: ShareQuality = 'standard';
+  /** What my running share was started as, which may differ from the setting if it changed since. */
+  private sharedAs: ShareQuality = 'standard';
 
   constructor(
     private myId: string,
@@ -245,7 +251,7 @@ export class Media {
     const lines = [`Voice connection: ${r.state}`, `People on voice: ${r.remoteParticipants.size + 1}`];
     const mine = r.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.track;
     if (mine && 'getSenderStats' in mine) {
-      lines.push(`You are sharing${this.sharingSound ? ' with sound' : ' WITHOUT sound'}`);
+      lines.push(`You are sharing${this.sharingSound ? ' with sound' : ' WITHOUT sound'}, asking for ${this.sharedAs === 'sharp' ? 'Sharp 1080p' : 'Standard 720p'}`);
       for (const s of await (mine as LocalVideoTrack).getSenderStats()) {
         lines.push(`  sending ${s.frameWidth}×${s.frameHeight} at ${Math.round(s.framesPerSecond ?? 0)} fps, target ${Math.round((s.targetBitrate ?? 0) / 1000)} kbps`);
         if (s.qualityLimitationReason && s.qualityLimitationReason !== 'none') lines.push(`  held back by: ${s.qualityLimitationReason}`);
@@ -292,17 +298,22 @@ export class Media {
 
   async toggleScreen() {
     const p = this.room.localParticipant;
-    // Tuned for video rather than slides: 720p at 30 frames a second, keeping motion smooth when
-    // the connection is tight, and shared sound left unprocessed (voice clean-up ruins music).
+    // Tuned for video rather than slides: 30 frames a second (720p, or 1080p when 'sharp' is chosen),
+    // keeping motion smooth when the connection is tight, and shared sound left unprocessed (voice
+    // clean-up ruins music).
+    const starting = !p.isScreenShareEnabled;
+    const quality = this.shareQuality;
+    const preset = quality === 'sharp' ? ScreenSharePresets.h1080fps30 : ScreenSharePresets.h720fps30;
     await p.setScreenShareEnabled(
-      !p.isScreenShareEnabled,
+      starting,
       {
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         contentHint: 'motion',
-        resolution: ScreenSharePresets.h720fps30.resolution,
+        resolution: preset.resolution,
       },
-      { screenShareEncoding: ScreenSharePresets.h720fps30.encoding, degradationPreference: 'maintain-framerate' },
+      { screenShareEncoding: preset.encoding, degradationPreference: 'maintain-framerate' },
     );
+    if (starting && p.isScreenShareEnabled) this.sharedAs = quality;
     return p.isScreenShareEnabled;
   }
 

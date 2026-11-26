@@ -154,6 +154,8 @@ export function cookLeave(g: CookoffGame, id: string): { ended: CookResult | nul
 export function cookServe(g: CookoffGame, id: string, dish: string, now: number, rnd: () => number = Math.random): CookServe | null {
   const p = g.players.find((x) => x.id === id);
   if (!p || g.phase !== 'play' || now >= g.until) return null;
+  // The kitchen always names what it serves; anything else is not a dish.
+  if (typeof dish !== 'string' || !dish) return null;
   const order = g.order[p.team];
   const bonus = !!order && order.dish === dish && now < order.until;
   const pts = dishPoints(dish) * (bonus ? 2 : 1);

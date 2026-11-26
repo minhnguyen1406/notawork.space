@@ -19,6 +19,7 @@ import { textSprite } from './avatar';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { Billboard } from './billboard';
 import { WorkSign } from './fun';
+import { furnish } from './furniture';
 
 export interface World {
   scene: THREE.Scene;
@@ -612,12 +613,33 @@ export function buildWorld(): World {
     chair.position.set(seat.x, 0, seat.z);
     chair.rotation.y = seat.ry;
     scene.add(chair);
+    furnish(scene, 'loungeChair', { x: seat.x, z: seat.z, ry: seat.ry, w: 1.4, h: 1.15, d: 1.25, back: 0.1, tint: { carpet: c, wood: '#5e3e29' } }, [chair]);
   });
+  // Low tables between every other pair of armchairs, with a lamp or a plant on each.
+  for (let i = 0; i < 4; i++) {
+    const a = ((i * 2 + 0.5) / 8) * Math.PI * 2;
+    const x = LOUNGE.x + Math.sin(a) * 3.85;
+    const z = LOUNGE.z + Math.cos(a) * 3.85;
+    furnish(scene, 'tableCoffeeSquare', { x, z, ry: a, w: 0.7, h: 0.5, d: 0.7, tint: { wood: '#7a5236' } });
+    if (i % 2) furnish(scene, 'lampRoundTable', { x, y: 0.5, z, h: 0.62, tint: { metal: '#3a2f3c' } });
+    else furnish(scene, i ? 'plantSmall2' : 'plantSmall1', { x, y: 0.5, z, h: 0.42, tint: { wood: '#b0603f' } });
+  }
 
   // --- Dining table (by the kitchen)
-  scene.add(box(1.8, 0.12, 5.8, '#7a5236', DINING.x, 0.9, DINING.z));
+  const diningTable = [box(1.8, 0.12, 5.8, '#7a5236', DINING.x, 0.9, DINING.z)];
   for (const dx of [-0.7, 0.7])
-    for (const dz of [-2.6, 2.6]) scene.add(box(0.16, 0.86, 0.16, '#5e3e29', DINING.x + dx, 0.43, DINING.z + dz));
+    for (const dz of [-2.6, 2.6]) diningTable.push(box(0.16, 0.86, 0.16, '#5e3e29', DINING.x + dx, 0.43, DINING.z + dz));
+  scene.add(...diningTable);
+  // Two tables pushed together end to end, each with a runner, on a rug.
+  for (const side of [-1, 1]) {
+    furnish(
+      scene,
+      'tableCloth',
+      { x: DINING.x, z: DINING.z + side * 1.45, ry: Math.PI / 2, w: 2.9, h: 0.96, d: 1.8, tint: { wood: '#7a5236', carpet: '#7d2c38' } },
+      side < 0 ? diningTable : [],
+    );
+  }
+  furnish(scene, 'rugRectangle', { x: DINING.x, y: 0.014, z: DINING.z, ry: Math.PI / 2, w: 7.8, h: 0.03, d: 5.4, tint: { carpet: '#3d5266', carpetDarker: '#2b3a4c' } });
   for (const seat of SEATS.filter((s) => s.group === 'dining')) {
     const chair = new THREE.Group();
     chair.add(box(0.8, 0.12, 0.8, '#c9a26b', 0, 0.5, 0));
@@ -626,6 +648,7 @@ export function buildWorld(): World {
     chair.position.set(seat.x, 0, seat.z);
     chair.rotation.y = seat.ry;
     scene.add(chair);
+    furnish(scene, 'chairCushion', { x: seat.x, z: seat.z, ry: seat.ry, w: 0.8, h: 1.3, d: 0.8, tint: { wood: '#c9a26b', carpet: '#b0603f' } }, [chair]);
   }
   for (const dz of [-1.6, 1.6]) {
     const candle = new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 5), glow('#ffc26a', 2.6));
@@ -653,7 +676,7 @@ export function buildWorld(): World {
     scene.add(lamp);
     scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(16.3, P.h, z), new THREE.Vector3(16.3, P.h - 0.7, z)]), cableMat));
   }
-  const kitchenLight = new THREE.PointLight('#fff1d6', 80, 20, 1.8);
+  const kitchenLight = new THREE.PointLight('#fff1d6', 30, 20, 1.8); // kept low: with the sky also lighting the scene, a bright lamp washes the kitchen out
   kitchenLight.position.set(16, P.h - 1, 3);
   scene.add(kitchenLight);
   const kitchenSign = neonSign('KITCHEN', '#6fe3d2', 0.9);
@@ -678,7 +701,11 @@ export function buildWorld(): World {
   }
 
   // --- Plants
-  for (const p of PLANTS) scene.add(plant(p.x, p.z, p.scale));
+  PLANTS.forEach((p, i) => {
+    const standIn = plant(p.x, p.z, p.scale);
+    scene.add(standIn);
+    furnish(scene, 'pottedPlant', { x: p.x, z: p.z, ry: i * 1.9, w: 1.0 * p.scale, h: 2.3 * p.scale, d: 1.1 * p.scale, tint: { wood: '#b0603f', woodDark: '#8a4a30' } }, [standIn]);
+  });
 
   const loungeSign = textSprite('Sit by the fire to talk face to face', 0.4);
   loungeSign.position.set(LOUNGE.x, 3.4, LOUNGE.z);

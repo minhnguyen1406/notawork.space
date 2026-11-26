@@ -2,10 +2,12 @@ import { Chess } from 'chess.js';
 import { seatGroup } from '../../shared/layout';
 import { NPC_ID } from '../../shared/fun';
 import {
+  cardsSkipIn,
   currentPlayer,
   drawCard,
   playCard,
   removePlayer,
+  skipTurn,
   startCards,
   topCard,
   type CardsGame,
@@ -18,8 +20,11 @@ import {
   newPoker,
   pokerAct,
   pokerLeave,
+  pokerSkip,
+  pokerSkipIn,
   pokerStart,
   potOf,
+  raiseRange,
   type PokerAction,
 } from '../../shared/poker';
 
@@ -86,7 +91,7 @@ export class Tables {
         : `Good luck, ${p.name}. I'm White, here we go.`,
       );
     }
-    if (was === 'poker' && now !== 'poker') pokerLeave(this.poker, p.id);
+    if (was === 'poker' && now !== 'poker') pokerLeave(this.poker, p.id, Date.now());
     if (was === 'wolf' && now !== 'wolf') this.announceWolf(() => wolfLeave(this.wolf, p.id, Date.now()));
     if (was === 'pho' && now !== 'pho') this.announcePho(() => phoLeave(this.pho, p.id));
     this.refresh(was);
@@ -165,7 +170,8 @@ export class Tables {
       this.chessLast = { from: a.from, to: a.to };
       if (this.chess.isCheckmate()) {
         this.io.notice(`${a.k === 'bot' ? 'Claude' : p.name} won at chess by checkmate`);
-        this.io.won?.('chess', a.k === 'bot' ? 'Claude' : p.name);
+        // Games against Claude don't count: its moves are chosen in the opponent's own browser.
+        if (!bot) this.io.won?.('chess', p.name);
       }
       if (bot) this.chessTalk(san, a.k === 'bot', p.name);
     } else {
@@ -189,6 +195,7 @@ export class Tables {
         dir: 1,
         hand: [],
         winner: null,
+        skipIn: 0,
         you: s.id,
       };
     }
@@ -202,6 +209,7 @@ export class Tables {
       dir: g.dir,
       hand: g.hands[s.id] ?? [],
       winner: g.winner ? g.names[g.winner] : null,
+      skipIn: cardsSkipIn(g, Date.now()),
       you: s.id,
     };
   }
@@ -209,21 +217,25 @@ export class Tables {
   private leaveCards(id: string) {
     const g = this.cards;
     if (!g || g.phase !== 'play' || !g.order.includes(id)) return;
-    if (!removePlayer(g, id)) this.cards = null; // not enough people left: back to the lobby
+    if (!removePlayer(g, id, Date.now())) this.cards = null; // not enough people left: back to the lobby
   }
 
   private cardsAction(p: Sitter, a: Record<string, unknown>) {
     const g = this.cards;
+    const now = Date.now();
     if (a.k === 'start') {
       if (g && g.phase === 'play') return;
       const players = this.at('cards');
       if (players.length < 2) return;
-      this.cards = startCards(players.map((x) => ({ id: x.id, name: x.name })));
+      this.cards = startCards(players.map((x) => ({ id: x.id, name: x.name })), now);
     } else if (a.k === 'play' && g && typeof a.card === 'string') {
-      if (!playCard(g, p.id, a.card, typeof a.suit === 'string' ? a.suit : undefined)) return;
+      if (!playCard(g, p.id, a.card, typeof a.suit === 'string' ? a.suit : undefined, now)) return;
       if (g.winner) this.io.notice(`${p.name} won at Last Card`);
     } else if (a.k === 'draw' && g) {
-      if (!drawCard(g, p.id)) return;
+      if (!drawCard(g, p.id, now)) return;
+    } else if (a.k === 'skip' && g) {
+      // Someone has wandered off on their turn: anyone else at the table may move the game on after a wait.
+      if (!skipTurn(g, p.id, now, this.at('cards').map((x) => x.id))) return;
     } else {
       return;
     }
@@ -237,7 +249,6 @@ export class Tables {
     const seated = this.at('poker');
     const mine = g.seats.find((x) => x.id === s.id);
     const myTurn = betting(g) && g.seats[g.turn]?.id === s.id;
-    const max = mine ? mine.bet + mine.chips : 0;
     return {
       phase: g.phase,
       players: g.seats.map((x, i) => ({
@@ -255,19 +266,24 @@ export class Tables {
       pot: potOf(g),
       turn: betting(g) ? (g.seats[g.turn]?.id ?? null) : null,
       toCall: myTurn && mine ? Math.min(g.currentBet - mine.bet, mine.chips) : 0,
-      raise: myTurn && mine && max > g.currentBet ? { min: Math.min(g.currentBet + g.minRaise, max), max } : null,
+      raise: myTurn && mine ? raiseRange(g, mine) : null,
       results: g.results,
       seated: seated.length,
+      skipIn: pokerSkipIn(g, Date.now()),
       you: s.id,
     };
   }
 
   private pokerAction(p: Sitter, a: Record<string, unknown>) {
     const g = this.poker;
+    const now = Date.now();
     if (a.k === 'deal') {
-      if (!pokerStart(g, this.at('poker').map((x) => ({ id: x.id, name: x.name })))) return;
+      if (!pokerStart(g, this.at('poker').map((x) => ({ id: x.id, name: x.name })), now)) return;
+    } else if (a.k === 'skip') {
+      // Someone has wandered off on their turn: anyone else at the table may move the hand on after a wait.
+      if (!pokerSkip(g, p.id, now, this.at('poker').map((x) => x.id))) return;
     } else if (a.k === 'fold' || a.k === 'call' || (a.k === 'raise' && typeof a.to === 'number' && Number.isFinite(a.to))) {
-      if (!pokerAct(g, p.id, a as PokerAction)) return;
+      if (!pokerAct(g, p.id, a as PokerAction, now)) return;
     } else {
       return;
     }

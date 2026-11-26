@@ -27,7 +27,8 @@ export const create: GameFactory = (io) => {
       } else if (a.k === 'leave') report(hideLeave(g, p.id), now);
       else if (a.k === 'start' && hideStart(g, p.id, now)) {
         const s = io.players().find((x) => x.id === g.seeker);
-        anchor = s ? { x: s.x, z: s.z } : null;
+        // No anchor is better than one that is not a place: the seeker would be "put back" to nowhere.
+        anchor = s && Number.isFinite(s.x) && Number.isFinite(s.z) ? { x: s.x, z: s.z } : null;
         io.notice(`Hide and seek: ${s?.name ?? 'Someone'} is the seeker. Thirty seconds to hide!`);
         if (g.seeker) io.emote(g.seeker, '🔎');
         publish(now);

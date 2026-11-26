@@ -1,0 +1,29 @@
+/* The Standard / Sharp 1080p switch beside the share button: one pill, two halves. */
+.ft-quality {
+  display: inline-flex;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px;
+  backdrop-filter: blur(8px);
+}
+.ft-quality[hidden] {
+  display: none;
+}
+.ft-quality .ft-quality-option {
+  background: transparent;
+  border: 0;
+  padding: 6px 11px;
+  font-size: 13px;
+  color: var(--muted);
+  backdrop-filter: none;
+  white-space: nowrap;
+}
+.ft-quality .ft-quality-option:hover {
+  color: var(--text);
+}
+.ft-quality .ft-quality-option.ft-quality-picked {
+  background: rgba(255, 233, 201, 0.16);
+  color: var(--text);
+  font-weight: 600;
+}

@@ -10,6 +10,9 @@ export type Card = string;
 export const rankOf = (c: Card) => c[0];
 export const suitOf = (c: Card) => c[1] as Suit;
 
+/** If the player whose turn it is has wandered off, anyone else at the table may skip them after this long. */
+export const SKIP_AFTER_MS = 40_000;
+
 export const RULES = [
   'Match the suit or the rank of the top card.',
   '8 is wild: play it on anything and choose the suit.',
@@ -47,11 +50,13 @@ export interface CardsGame {
   /** Cards the next player must draw because of 2s. */
   pending: number;
   winner: string | null;
+  /** When the current turn began (the caller's clock, in milliseconds). */
+  turnSince: number;
 }
 
 const SPECIAL = new Set(['2', '8', 'J', 'A']);
 
-export function startCards(players: { id: string; name: string }[]): CardsGame {
+export function startCards(players: { id: string; name: string }[], now: number): CardsGame {
   const drawPile = newDeck(players.length > 5 ? 2 : 1);
   const handSize = players.length > 5 ? 5 : 7;
   const hands: Record<string, Card[]> = {};
@@ -76,6 +81,7 @@ export function startCards(players: { id: string; name: string }[]): CardsGame {
     dir: 1,
     pending: 0,
     winner: null,
+    turnSince: now,
   };
 }
 
@@ -109,7 +115,7 @@ function drawFromPile(g: CardsGame, count: number): Card[] {
 }
 
 /** Returns true if the play was legal and applied. */
-export function playCard(g: CardsGame, pid: string, card: Card, chosen?: string): boolean {
+export function playCard(g: CardsGame, pid: string, card: Card, chosen: string | undefined, now: number): boolean {
   if (g.phase !== 'play' || currentPlayer(g) !== pid) return false;
   const hand = g.hands[pid];
   const i = hand.indexOf(card);
@@ -119,6 +125,7 @@ export function playCard(g: CardsGame, pid: string, card: Card, chosen?: string)
   const rank = rankOf(card);
   g.suit = rank === '8' && SUITS.includes(chosen as Suit) ? (chosen as Suit) : suitOf(card);
 
+  g.turnSince = now;
   if (hand.length === 0) {
     g.phase = 'over';
     g.winner = pid;
@@ -133,19 +140,40 @@ export function playCard(g: CardsGame, pid: string, card: Card, chosen?: string)
 }
 
 /** Draw instead of playing: the owed cards if 2s are pending, otherwise one. The turn then passes. */
-export function drawCard(g: CardsGame, pid: string): boolean {
+export function drawCard(g: CardsGame, pid: string, now: number): boolean {
   if (g.phase !== 'play' || currentPlayer(g) !== pid) return false;
   g.hands[pid].push(...drawFromPile(g, g.pending || 1));
   g.pending = 0;
   advance(g);
+  g.turnSince = now;
   return true;
 }
 
+/** Milliseconds until someone else may skip the player whose turn it is; 0 when they may, or when the game is over. */
+export function cardsSkipIn(g: CardsGame, now: number): number {
+  if (g.phase !== 'play') return 0;
+  return Math.max(0, g.turnSince + SKIP_AFTER_MS - now);
+}
+
+/**
+ * Someone else at the table moves the game past a player who has wandered off: allowed once the
+ * turn has lasted SKIP_AFTER_MS. The absent player draws (any cards owed for 2s, otherwise one)
+ * and the turn passes. `seated` is everyone sitting at the table right now.
+ */
+export function skipTurn(g: CardsGame, by: string, now: number, seated: readonly string[]): boolean {
+  if (g.phase !== 'play') return false;
+  const who = currentPlayer(g);
+  if (who === undefined || who === by || !Array.isArray(seated) || !seated.includes(by)) return false;
+  if (!(now - g.turnSince >= SKIP_AFTER_MS)) return false;
+  return drawCard(g, who, now);
+}
+
 /** Someone left the table: their cards go under the discard pile. Returns false if the game can't go on. */
-export function removePlayer(g: CardsGame, pid: string): boolean {
+export function removePlayer(g: CardsGame, pid: string, now: number): boolean {
   const i = g.order.indexOf(pid);
   if (i < 0) return g.order.length >= 2;
   const wasTurn = i === g.turn;
+  if (wasTurn) g.turnSince = now; // the clock starts again for whoever is next
   g.discard.unshift(...(g.hands[pid] ?? []));
   delete g.hands[pid];
   g.order.splice(i, 1);

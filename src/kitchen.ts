@@ -12,6 +12,7 @@ import {
 } from '../shared/kitchen';
 import { box, mat } from './world';
 import { textSprite, type Avatar } from './avatar';
+import { furnish } from './furniture';
 
 const mesh = (geo: THREE.BufferGeometry, color: string, x = 0, y = 0, z = 0) => {
   const m = new THREE.Mesh(geo, mat(color));
@@ -117,6 +118,22 @@ export class KitchenView {
     for (const st of STATIONS) scene.add(this.buildStation(st));
     this.table.position.set(DINING.x, 0.96, DINING.z);
     scene.add(this.table);
+    // Fridges against the parapet behind the wall run, where nobody can walk.
+    for (const z of [-3, 9]) furnish(scene, 'kitchenFridge', { x: 19.68, z, ry: -Math.PI / 2, w: 0.9, h: 2.15, d: 0.56 });
+  }
+
+  /**
+   * Kit cabinets filling a station's 1.6 m square in place of its plain box. The island is worked
+   * from both sides, so its cabinets stand back to back; the wall run only faces the kitchen.
+   * `h` is the cabinet height: its worktop is at 93% of that, with a lip behind, both of which end
+   * up just inside the station's own top slab, so the surface things rest on does not move.
+   */
+  private cabinets(g: THREE.Group, st: Station, model: string, h: number, standIn: THREE.Object3D, tint?: Record<string, string>) {
+    const island = st.x < 16;
+    for (const dz of [-0.4, 0.4]) {
+      if (island) for (const side of [-1, 1]) furnish(g, model, { x: side * 0.4, z: dz, ry: (side * Math.PI) / 2, w: 0.8, h, d: 0.8, tint }, [standIn]);
+      else furnish(g, model, { z: dz, ry: -Math.PI / 2, w: 0.8, h, d: 1.6, tint }, [standIn]);
+    }
   }
 
   private buildStation(st: Station): THREE.Group {
@@ -135,15 +152,18 @@ export class KitchenView {
     };
 
     if (st.type === 'bin') {
-      g.add(mesh(new THREE.CylinderGeometry(0.62, 0.5, 1.1, 10), '#3f5a4a', 0, 0.55, 0));
-      g.add(mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.08, 10), '#2c4035', 0, 1.12, 0));
+      const bin = [mesh(new THREE.CylinderGeometry(0.62, 0.5, 1.1, 10), '#3f5a4a', 0, 0.55, 0), mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.08, 10), '#2c4035', 0, 1.12, 0)];
+      g.add(...bin);
+      furnish(g, 'trashcan', { ry: -Math.PI / 2, w: 1.15, h: 1.16, d: 1.25, tint: { metal: '#4f6f5c', metalDark: '#2c4035' } }, bin);
       label('Bin');
       return g;
     }
 
     if (st.type === 'crate') {
-      g.add(box(1.6, 0.9, 1.6, '#b98b56', 0, 0.45, 0));
+      const crate = box(1.6, 0.9, 1.6, '#b98b56', 0, 0.45, 0);
+      g.add(crate);
       g.add(box(1.7, 0.12, 1.7, '#8f6a3f', 0, 0.94, 0));
+      this.cabinets(g, st, 'kitchenCabinet', 0.955, crate, { wood: '#b98b56', woodDark: '#8f6a3f', metal: '#8f6a3f' });
       for (const [dx, dz] of [[-0.3, -0.25], [0.3, -0.2], [0, 0.3]] as const) {
         const m = ingMesh(st.ing!, 'raw');
         m.position.set(dx, 1.0, dz);
@@ -155,8 +175,13 @@ export class KitchenView {
     }
 
     // Everything else is a counter with something on top.
-    g.add(box(1.6, 0.96, 1.6, '#a9794f', 0, 0.48, 0));
+    const body = box(1.6, 0.96, 1.6, '#a9794f', 0, 0.48, 0);
+    g.add(body);
     g.add(box(1.72, 0.1, 1.72, '#efe8da', 0, 1.02, 0));
+    this.cabinets(g, st, st.type === 'stove' ? 'kitchenStove' : st.type === 'counter' || st.type === 'hatch' ? 'kitchenCabinetDrawer' : 'kitchenCabinet', 1.05, body, {
+      wood: '#a9794f',
+      metal: '#efe8da',
+    });
 
     if (st.type === 'board') {
       g.add(box(1.0, 0.05, 0.7, '#d7b58a', 0, 1.095, 0));
