@@ -36,5 +36,8 @@ for (const [name, p] of [['first', a], ['second', b]]) {
   console.log('chat log tail:', (await p.$eval('#chat-log', (e) => e.textContent)).slice(-160));
   if (p.errors.length) console.log('errors:', p.errors.slice(0, 4));
 }
+await a.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await b.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await new Promise((r) => setTimeout(r, 300));
 await a.owner.close();
 await b.owner.close();

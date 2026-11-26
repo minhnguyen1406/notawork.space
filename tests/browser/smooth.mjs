@@ -153,6 +153,9 @@ check('and you can walk again', (await a.pos())[1] > after[1] + 1);
 
 console.log(errors.length ? errors : 'no page errors');
 console.log(failed ? `${failed} FAILED` : 'ALL PASSED');
+await a.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await b.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await new Promise((r) => setTimeout(r, 300));
 await a.owner.close();
 await b.owner.close();
 process.exit(failed ? 1 : 0);

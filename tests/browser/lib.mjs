@@ -17,6 +17,13 @@ export async function until(fn, ms = 12000) {
   return false;
 }
 
+/** Walk out of the room properly. A browser that just vanishes looks like a broken connection, and
+ *  its place is then held for a minute, which would spill into the next test. */
+export async function leave(...list) {
+  for (const p of list) await p.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+  await sleep(300);
+}
+
 const pages = [];
 /** Open a browser, join the room under this name, and return the page with a few extras. */
 export async function open(name, { media = false } = {}) {
@@ -60,6 +67,7 @@ export async function open(name, { media = false } = {}) {
 export async function done() {
   console.log(errors.length ? errors : 'no page errors');
   console.log(failed || errors.length ? `${failed} FAILED` : 'ALL PASSED');
+  await leave(...pages);
   for (const p of pages) await p.owner.close();
   process.exit(failed || errors.length ? 1 : 0);
 }

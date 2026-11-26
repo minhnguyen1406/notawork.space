@@ -58,7 +58,8 @@ test('the camera wedge points the way the camera looks', () => {
 });
 
 test('the large map is about 70% of the window height but never wider than the screen', () => {
-  expect(mapHeight(largeMapWidth(1600, 1000))).toBeCloseTo(700, 0);
+  // (Within a pixel or so: the width is a whole number, and the roof is not square.)
+  expect(Math.abs(mapHeight(largeMapWidth(1600, 1000)) - 700)).toBeLessThan(1.5);
   expect(largeMapWidth(400, 1000)).toBeLessThanOrEqual(400);
 });
 

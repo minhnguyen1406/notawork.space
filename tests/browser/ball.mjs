@@ -78,5 +78,7 @@ check(`Space lifts the ball off the grass (peak ${peak.toFixed(2)} m)`, peak > 0
 check(`and sends it much further than a dribble (${travelled.toFixed(1)} m, or into the goal)`, travelled > 9 || Math.abs(shot.x - P.cx) < 0.01);
 console.log(errors.length ? errors : 'no page errors');
 console.log(failed ? `${failed} FAILED` : 'ALL PASSED');
+await page.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await new Promise((r) => setTimeout(r, 300));
 await browser.close();
 process.exit(failed ? 1 : 0);

@@ -79,15 +79,9 @@ function render() {
     deal.disabled = v.players.length < TL_MIN;
     row.append(deal);
   };
-  // Which regional version is being played. Between hands, anyone at the table can switch it.
+  // One version is offered: the southern rules (the northern ones are still in the rules file, unused).
   const version = el('div', 'mg-tienlen-version');
-  if (v.phase === 'play' || !playing) version.append(el('span', 'mg-tienlen-variant', VARIANT_NAMES[v.variant]));
-  else
-    for (const k of ['nam', 'bac'] as const) {
-      const b = button(VARIANT_NAMES[k], () => send({ k: 'variant', v: k }), k === v.variant ? 'mg-tienlen-variant on' : '');
-      b.disabled = k === v.variant;
-      version.append(b);
-    }
+  version.append(el('span', 'mg-tienlen-variant', VARIANT_NAMES[v.variant]));
   body.push(version);
 
   if (v.phase === 'play') {

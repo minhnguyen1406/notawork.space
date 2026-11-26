@@ -101,5 +101,7 @@ check('any command brings it back', await until(async () => (await claude()) !==
 
 console.log(errors.length ? errors : 'no page errors');
 console.log(failed ? `${failed} FAILED` : 'ALL PASSED');
+await page.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await new Promise((r) => setTimeout(r, 300));
 await browser.close();
 process.exit(failed ? 1 : 0);

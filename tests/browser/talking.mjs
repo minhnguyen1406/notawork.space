@@ -48,6 +48,9 @@ if (out) await b.screenshot({ path: `${out}/talking.jpg`, type: 'jpeg', quality:
 await a.keyboard.press('KeyM');
 check('it clears when you stop', await until(async () => !(await talking(b)).includes(aid)));
 console.log(failed ? `${failed} FAILED` : 'ALL PASSED');
+await a.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await b.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await new Promise((r) => setTimeout(r, 300));
 await a.owner.close();
 await b.owner.close();
 process.exit(failed ? 1 : 0);

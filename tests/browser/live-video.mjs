@@ -86,6 +86,9 @@ check('in the face grid your own picture is mirrored', ta.some((t) => t.name?.in
 check("and the other person sees you un-mirrored", tb.some((t) => t.name === 'Ann' && t.video && !t.mirror));
 if (out) await a.screenshot({ path: `${out}/grid-own.png` });
 console.log(failed ? `${failed} FAILED` : 'ALL PASSED');
+await a.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await b.evaluate(() => window.__debug?.leaveRoom?.()).catch(() => {});
+await new Promise((r) => setTimeout(r, 300));
 await a.owner.close();
 await b.owner.close();
 process.exit(failed ? 1 : 0);

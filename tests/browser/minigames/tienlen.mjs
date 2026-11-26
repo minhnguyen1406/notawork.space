@@ -27,38 +27,25 @@ await a.openGame('tienlen');
 check('E at the signpost opens the game', (await a.text(`${P} h2`)) === 'Tiến lên');
 check('it says how many are needed', (await status(a)).includes('Needs 2 to 4'));
 check('the version starts as Miền Nam', (await version(a)) === 'Miền Nam');
-check('someone who is not seated cannot switch the version', !(await a.press(P, 'Miền Bắc')));
+check('someone who is not seated is offered no switch', !(await a.press(P, 'Miền Bắc')));
 await a.press(P, 'Join');
 check('one player cannot deal', (await until(async () => (await a.text(`${P} .mg-players`)).includes('Ann'))) && !(await a.press(P, 'Deal')));
 await b.openGame('tienlen');
 await b.press(P, 'Join');
 check('both players are listed for both', await until(async () => (await a.text(`${P} .mg-players`)) === 'AnnBao' && (await b.text(`${P} .mg-players`)) === 'AnnBao'));
-check('a seated player switches to Miền Bắc and everyone sees it', (await b.press(P, 'Miền Bắc')) && (await until(async () => (await version(a)) === 'Miền Bắc' && (await version(b)) === 'Miền Bắc')));
-check('the lobby describes the northern rules', (await a.text(P)).includes('same colour'));
+check('there is one version: no switch is offered, seated or not', !(await b.press(P, 'Miền Bắc')) && (await version(b)) === 'Miền Nam');
 
-// ---- a northern hand ----
-check('a northern deal gives each player 13 cards', await deal(a));
+// ---- a hand that ends when someone leaves ----
+check('a deal gives each player 13 cards', await deal(a));
 let ha = await hand(a);
 let hb = await hand(b);
 check('the two hands share no card', ha.every((c) => !hb.includes(c)));
 check('red cards are exactly the diamonds and hearts', (await reds(a)).join() === ha.filter((c) => /[♦♥]/.test(c)).join());
 check('opponent card counts are shown', (await a.text(`${P} .mg-players`)).includes('Bao · 13 cards'));
-check('the version is shown during play and cannot be switched', (await version(b)) === 'Miền Bắc' && !(await a.press(P, 'Miền Nam')) && !(await b.press(P, 'Miền Nam')));
+check('the version is shown during play and cannot be switched', (await version(b)) === 'Miền Nam' && !(await a.press(P, 'Miền Bắc')));
 let first = (await status(a)).startsWith('Your turn') ? a : b;
 let second = first === a ? b : a;
 check('exactly one player is on turn', (await status(first)).startsWith('Your turn') && !(await status(second)).startsWith('Your turn'));
-check('the northern opener leads anything', (await status(first)).includes('lead anything'));
-// A northern reason, if this hand happens to hold two cards of one rank in different colours.
-const mine = await hand(first);
-const black = mine.find((c) => /[♠♣]/.test(c) && mine.some((d) => /[♦♥]/.test(d) && d.slice(0, -1) === c.slice(0, -1)));
-if (black) {
-  const red = mine.find((d) => /[♦♥]/.test(d) && d.slice(0, -1) === black.slice(0, -1));
-  await first.press(HAND, black);
-  await first.press(HAND, red);
-  check('a mixed-colour pair gets the northern reason and cannot be played', (await until(async () => (await why(first)) === 'Miền Bắc: a pair must be the same colour.')) && !(await first.press(P, 'Play')));
-  await first.press(HAND, black);
-  await first.press(HAND, red);
-} else console.log('SKIP no mixed-colour pair in this hand');
 await second.press(P, 'Leave');
 check('a player leaving ends the hand for the one who is left', await until(async () => (await status(first)).includes('wins the hand')));
 check('and the panel closes for the one who left', (await second.text(`${P} h2`)) === '');
@@ -68,7 +55,6 @@ check('the results name the winner nhất', (await first.text(`${P} .mg-tienlen-
 await second.openGame('tienlen');
 await second.press(P, 'Join');
 await until(async () => (await first.text(`${P} .mg-players`)).length > 5);
-check('between hands the version can be switched back', (await second.press(P, 'Miền Nam')) && (await until(async () => (await version(first)) === 'Miền Nam')));
 // The winner of the last hand may have changed seats; start a clean session so the lowest card opens.
 await a.press(P, 'Leave');
 await b.press(P, 'Leave');

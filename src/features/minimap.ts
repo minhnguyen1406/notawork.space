@@ -17,6 +17,7 @@ import {
   SCREEN,
   STATIONS,
   STATION_HALF,
+  HIDEOUTS,
   WHEEL,
   WOLF_RING,
 } from '../../shared/layout';
@@ -91,6 +92,7 @@ const LABELS: [string, string, number, number][] = [
   ['', 'Poker', POKER_TABLE.x, POKER_TABLE.z + POKER_TABLE.r + 1.1],
   ['Race', 'Race course', WHEEL.x, -9],
   ['Wheel', 'Wheel', WHEEL.x, WHEEL.z + 3.6],
+  ['Garden', 'Garden hideouts', -30, 53.4],
   ['Wolf', 'Werewolf fire', WOLF_RING.x, WOLF_RING.z - WOLF_RING.r - 1.8],
   ['Phố Lớn', 'Phố Lớn table', PHO_TABLE.x, PHO_TABLE.z - 2.4],
   ['Sumo', 'Sumo ring', GAME_ZONES.sumo.x, GAME_ZONES.sumo.z],
@@ -264,6 +266,11 @@ function draw() {
   });
 
   // The wheel, which stands edge-on facing east.
+  // The garden's hedges, crates and tanks.
+  for (const h of HIDEOUTS) {
+    if (h.kind === 'tank') circle(h.x, h.z, h.w / 2, 'rgba(140, 160, 180, 0.45)', null);
+    else rect(h.x - h.w / 2, h.z - h.d / 2, h.x + h.w / 2, h.z + h.d / 2, h.kind === 'hedge' ? 'rgba(95, 170, 90, 0.5)' : 'rgba(190, 140, 90, 0.5)', null);
+  }
   circle(WHEEL.x, WHEEL.z, 1.7, C.soft, C.amber);
   dot(WHEEL.x, WHEEL.z, big ? 2.5 : 1.2, C.amber);
 

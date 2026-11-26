@@ -5,6 +5,7 @@ import {
   NEWS_WALL,
   BOUNDS,
   CENTRE,
+  HIDEOUTS,
   DINING,
   LOUNGE,
   MAST_H,
@@ -437,8 +438,8 @@ export function buildWorld(): World {
   sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.bias = -0.0005;
   const sc = sun.shadow.camera;
-  sc.left = sc.bottom = -52;
-  sc.right = sc.top = 52;
+  sc.left = sc.bottom = -62;
+  sc.right = sc.top = 62;
   sc.far = 150;
   scene.add(sun);
 
@@ -706,6 +707,57 @@ export function buildWorld(): World {
     scene.add(standIn);
     furnish(scene, 'pottedPlant', { x: p.x, z: p.z, ry: i * 1.9, w: 1.0 * p.scale, h: 2.3 * p.scale, d: 1.1 * p.scale, tint: { wood: '#b0603f', woodDark: '#8a4a30' } }, [standIn]);
   });
+
+  // --- The garden: things to hide behind in the west and south strips. All of it is solid.
+  const hedgeMats = [mat('#3f7d3a'), mat('#4b8a43'), mat('#356e36')];
+  const crateMats = [mat('#a8794a'), mat('#8f6238'), mat('#b98a58')];
+  HIDEOUTS.forEach((h, i) => {
+    if (h.kind === 'hedge') {
+      const planter = box(h.w + 0.3, 0.5, h.d + 0.3, '#6b5a52', h.x, 0.25, h.z);
+      const bush = new THREE.Mesh(new THREE.BoxGeometry(h.w, 1.7, h.d), hedgeMats[i % 3]);
+      bush.position.set(h.x, 1.35, h.z);
+      bush.castShadow = bush.receiveShadow = true;
+      // A few rounded clumps on top so it reads as a plant, not a wall.
+      const along = h.w > h.d;
+      const n = Math.max(2, Math.round((along ? h.w : h.d) / 1.4));
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n - 0.5;
+        const clump = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62 + ((i + k) % 3) * 0.06, 0), hedgeMats[(i + k + 1) % 3]);
+        clump.position.set(h.x + (along ? t * h.w : 0), 2.2, h.z + (along ? 0 : t * h.d));
+        clump.castShadow = true;
+        scene.add(clump);
+      }
+      scene.add(planter, bush);
+    } else if (h.kind === 'crates') {
+      // A bottom layer of crates filling the footprint, and a second layer on part of it.
+      const nx = Math.round(h.w / 1.2);
+      const nz = Math.round(h.d / 1.2);
+      for (let a = 0; a < nx; a++)
+        for (let b = 0; b < nz; b++) {
+          const x = h.x + (a - (nx - 1) / 2) * 1.2;
+          const z = h.z + (b - (nz - 1) / 2) * 1.2;
+          const tall = (a + b + i) % 3 !== 0;
+          for (let level = 0; level < (tall ? 2 : 1); level++) {
+            const c = new THREE.Mesh(new THREE.BoxGeometry(1.14, 1.14, 1.14), crateMats[(a + b * 2 + level + i) % 3]);
+            c.position.set(x, 0.57 + level * 1.15, z);
+            c.rotation.y = level ? 0.18 * (((a + b) % 2) * 2 - 1) : 0;
+            c.castShadow = c.receiveShadow = true;
+            scene.add(c);
+          }
+        }
+    } else {
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(h.w / 2, h.w / 2, 2.6, 14), mat('#7c8794'));
+      tank.position.set(h.x, 1.6, h.z);
+      tank.castShadow = tank.receiveShadow = true;
+      const lid = new THREE.Mesh(new THREE.ConeGeometry(h.w / 2 + 0.08, 0.6, 14), mat('#5d6772'));
+      lid.position.set(h.x, 3.2, h.z);
+      scene.add(tank, lid);
+      for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) scene.add(box(0.16, 0.34, 0.16, '#3a2f3c', h.x + dx * h.w * 0.3, 0.17, h.z + dz * h.w * 0.3));
+    }
+  });
+  const gardenSign = textSprite('The garden: good hiding', 0.4);
+  gardenSign.position.set(-52, 3.6, 22);
+  scene.add(gardenSign);
 
   const loungeSign = textSprite('Sit by the fire to talk face to face', 0.4);
   loungeSign.position.set(LOUNGE.x, 3.4, LOUNGE.z);

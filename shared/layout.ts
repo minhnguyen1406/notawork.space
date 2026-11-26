@@ -5,7 +5,52 @@ import type { IngType } from './kitchen';
 export const SPAWN = { x: 0, z: 10 };
 
 /** The walkable roof. The original corner (cinema, lounge, kitchen) sits in the north-east. */
-export const BOUNDS = { x1: -44, x2: 20, z1: -20, z2: 44 };
+export const BOUNDS = { x1: -60, x2: 20, z1: -20, z2: 56 };
+/** The roof as first built. The strips added since (west of x1, south of z2) are the garden. */
+export const OLD_ROOF = { x1: -44, z2: 44 };
+
+/**
+ * The garden: hedges, crates and water tanks in the newer west and south strips. They are solid and
+ * tall enough to hide behind, which is what hide and seek and tag needed.
+ */
+export interface Hideout {
+  kind: 'hedge' | 'crates' | 'tank';
+  x: number;
+  z: number;
+  /** Width (east-west) and depth (north-south); a tank uses `w` as its diameter. */
+  w: number;
+  d: number;
+}
+export const HIDEOUTS: Hideout[] = [
+  // West strip, north to south: a loose maze of hedges.
+  { kind: 'hedge', x: -52, z: -14, w: 7, d: 1.2 },
+  { kind: 'tank', x: -56.5, z: -9, w: 2.6, d: 2.6 },
+  { kind: 'hedge', x: -48.5, z: -6, w: 1.2, d: 6 },
+  { kind: 'crates', x: -54, z: -2, w: 2.4, d: 2.4 },
+  { kind: 'hedge', x: -54.5, z: 5, w: 6, d: 1.2 },
+  { kind: 'hedge', x: -48.5, z: 9.5, w: 1.2, d: 5 },
+  { kind: 'crates', x: -56.5, z: 13, w: 2.4, d: 3.6 },
+  { kind: 'hedge', x: -51.5, z: 18, w: 7, d: 1.2 },
+  { kind: 'tank', x: -49, z: 25, w: 2.6, d: 2.6 },
+  { kind: 'hedge', x: -55, z: 28, w: 1.2, d: 6 },
+  { kind: 'crates', x: -50, z: 33.5, w: 3.6, d: 2.4 },
+  { kind: 'hedge', x: -54, z: 39, w: 6, d: 1.2 },
+  // The south-west corner, behind the werewolf fire.
+  { kind: 'tank', x: -56, z: 46, w: 2.6, d: 2.6 },
+  { kind: 'hedge', x: -49, z: 48.5, w: 1.2, d: 6 },
+  { kind: 'crates', x: -53, z: 52.5, w: 2.4, d: 2.4 },
+  // South strip, west to east, behind the pitch.
+  { kind: 'hedge', x: -40, z: 49, w: 7, d: 1.2 },
+  { kind: 'crates', x: -33, z: 52.5, w: 3.6, d: 2.4 },
+  { kind: 'hedge', x: -27, z: 48.5, w: 1.2, d: 5 },
+  { kind: 'tank', x: -21, z: 52, w: 2.6, d: 2.6 },
+  { kind: 'hedge', x: -14, z: 49.5, w: 7, d: 1.2 },
+  { kind: 'crates', x: -7, z: 52.5, w: 2.4, d: 3.6 },
+  { kind: 'hedge', x: -1, z: 48.5, w: 1.2, d: 5 },
+  { kind: 'hedge', x: 6, z: 51, w: 7, d: 1.2 },
+  { kind: 'tank', x: 12, z: 47.5, w: 2.6, d: 2.6 },
+  { kind: 'crates', x: 16.5, z: 52.5, w: 2.4, d: 2.4 },
+];
 export const CENTRE = { x: (BOUNDS.x1 + BOUNDS.x2) / 2, z: (BOUNDS.z1 + BOUNDS.z2) / 2 };
 
 /** Football pitch (south). Goals are at the west and east ends. */
@@ -207,14 +252,14 @@ export const PLANTS: { x: number; z: number; scale: number }[] = [
   { x: 3.4, z: 18.2, scale: 1 },
   { x: -18.4, z: -7, scale: 1.2 },
   { x: -18.4, z: -1, scale: 1.2 },
-  { x: -42.4, z: -18.4, scale: 1.4 },
-  { x: -42.4, z: 42.4, scale: 1.4 },
-  { x: 18.4, z: 42.4, scale: 1.4 },
+  { x: -58.4, z: -18.4, scale: 1.4 },
+  { x: -58.4, z: 54.4, scale: 1.4 },
+  { x: 18.4, z: 54.4, scale: 1.4 },
   { x: -32, z: -17.5, scale: 1.1 },
   { x: -32, z: 17.5, scale: 1.1 },
   { x: 18.3, z: 28.5, scale: 1.2 },
   { x: 9.8, z: 30, scale: 1.2 },
-  { x: -42.6, z: 21.6, scale: 1.2 },
+  { x: -58.6, z: 21.6, scale: 1.2 },
   { x: -33, z: 32.4, scale: 1.1 },
 ];
 
