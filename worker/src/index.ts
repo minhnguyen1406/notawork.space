@@ -8,6 +8,7 @@ import {
   COLORS,
   MAX_CHAT,
   MAX_NAME,
+  HOLD_MS,
   MAX_PLAYERS,
   TICK_HZ,
   type Board,
@@ -17,7 +18,7 @@ import {
   type ServerMsg,
   LOOKS,
 } from '../../shared/protocol';
-import { BOUNDS, SEATS, SPAWN, SPOTS, STATIONS } from '../../shared/layout';
+import { BOUNDS, SEATS, seatGroup, SPAWN, SPOTS, STATIONS } from '../../shared/layout';
 import { ballMoving, centreBall, MAX_KICK, stepBall, MAX_LIFT } from '../../shared/ball';
 import { Tables } from './tables';
 import { actStation, newKitchen, useStation, type KitchenState } from '../../shared/kitchen';
@@ -58,6 +59,8 @@ interface Player extends PlayerInfo {
   lastSeen: number;
   lastChat: number;
   lastEmote: number;
+  /** The secret that lets this person back in as themselves after a dropped connection. */
+  resume: string;
 }
 
 const clamp = (v: unknown, limit: number) => range(v, -limit, limit);
@@ -73,6 +76,8 @@ const clean = (v: unknown, max: number) =>
 /** The whole room lives in one object: who is here, where they are, and the kitchen. */
 export class Room extends DurableObject<Env> {
   private players = new Map<WebSocket, Player>();
+  /** People whose connection dropped, by id: still in the room, seat and games held, until `until`. */
+  private away = new Map<string, { p: Player; until: number }>();
   private kitchen: KitchenState = newKitchen();
   private timer: ReturnType<typeof setInterval> | null = null;
   private moved = false;
@@ -170,7 +175,10 @@ export class Room extends DurableObject<Env> {
   }
   /** Real players plus the Claude character, for anything that asks "who is where". */
   private everyone(): PlayerInfo[] {
-    return this.npc.here ? [...this.players.values(), this.npc.info] : [...this.players.values()];
+    const all: PlayerInfo[] = [...this.players.values()];
+    for (const a of this.away.values()) all.push(a.p);
+    if (this.npc.here) all.push(this.npc.info);
+    return all;
   }
 
   private tables = new Tables({
@@ -214,9 +222,10 @@ export class Room extends DurableObject<Env> {
     server.addEventListener('message', (e) => {
       this.onMessage(server, e.data).catch((err) => console.error('message failed', err));
     });
-    const bye = () => this.drop(server);
-    server.addEventListener('close', bye);
-    server.addEventListener('error', bye);
+    // A tidy close (the tab was closed, or the page asked to leave) means they have gone. Anything
+    // else is a connection that broke, and their place is held in case they come straight back.
+    server.addEventListener('close', (e) => this.drop(server, e.code === 1000 || e.code === 1001 || e.code === 1005));
+    server.addEventListener('error', () => this.drop(server));
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -245,7 +254,11 @@ export class Room extends DurableObject<Env> {
     this.broadcast({ t: 'kitchen', state: this.kitchen });
   }
 
-  private drop(ws: WebSocket) {
+  /**
+   * A connection has gone. Unless they left on purpose (`gone`), their place is held for a while:
+   * a wifi blip or a sleeping laptop should not cost anyone their seat or their hand of cards.
+   */
+  private drop(ws: WebSocket, gone = false) {
     const p = this.players.get(ws);
     try {
       ws.close();
@@ -254,6 +267,13 @@ export class Room extends DurableObject<Env> {
     }
     if (!p) return;
     this.players.delete(ws);
+    if (gone) return this.leave(p);
+    this.away.set(p.id, { p, until: Date.now() + HOLD_MS });
+    this.broadcast({ t: 'away', id: p.id, away: true });
+  }
+
+  /** Someone is really gone: free their seat, end their games, tell the room. */
+  private leave(p: Player) {
     const wasHolding = this.kitchen.held[p.id];
     delete this.kitchen.held[p.id];
     this.broadcast({ t: 'leave', id: p.id });
@@ -263,7 +283,7 @@ export class Room extends DurableObject<Env> {
     const seat = p.seat;
     p.seat = null;
     this.tables.seatChanged(p, seat);
-    if (this.players.size === 0 && this.timer) {
+    if (this.players.size === 0 && this.away.size === 0 && this.timer) {
       clearInterval(this.timer);
       this.timer = null;
       // Nobody left: Claude gets up and goes back to the fire for next time.
@@ -293,6 +313,15 @@ export class Room extends DurableObject<Env> {
 
   private tick() {
     this.ticks++;
+    // Held places run out.
+    if (this.away.size) {
+      const now = Date.now();
+      for (const [id, a] of [...this.away]) {
+        if (a.until > now) continue;
+        this.away.delete(id);
+        this.leave(a.p);
+      }
+    }
     this.tickBall();
     if (this.npc.tick(1 / TICK_HZ)) this.moved = true;
     this.duels.tick(Date.now());
@@ -307,7 +336,7 @@ export class Room extends DurableObject<Env> {
     // Every few seconds, clear out anyone whose connection died without saying so.
     if (this.ticks % (TICK_HZ * 5) === 0) {
       const cutoff = Date.now() - STALE_MS;
-      for (const [ws, p] of [...this.players]) if (p.lastSeen < cutoff) this.drop(ws);
+      for (const [ws, p] of [...this.players]) if (p.lastSeen < cutoff) this.drop(ws, true);
       this.refreshBoard();
     }
   }
@@ -481,11 +510,20 @@ export class Room extends DurableObject<Env> {
 
       case 'ping':
         break;
+      case 'bye':
+        this.drop(ws, true);
+        break;
     }
   }
 
   /** Sockets part-way through joining, so a second join message can't create a second player. */
   private joining = new Set<WebSocket>();
+
+  private findResume(key: string): Player | null {
+    for (const a of this.away.values()) if (a.p.resume === key) return a.p;
+    for (const p of this.players.values()) if (p.resume === key) return p;
+    return null;
+  }
 
   private async join(ws: WebSocket, msg: Extract<ClientMsg, { t: 'join' }>) {
     if (this.joining.has(ws)) return;
@@ -495,13 +533,15 @@ export class Room extends DurableObject<Env> {
       ws.close();
       return;
     }
-    if (this.players.size >= MAX_PLAYERS) {
+    // Coming back after a dropped connection? Then they are who they were, not a newcomer.
+    const known = typeof msg.resume === 'string' && msg.resume.length > 20 ? this.findResume(msg.resume) : null;
+    if (!known && this.players.size + this.away.size >= MAX_PLAYERS) {
       this.send(ws, { t: 'denied', reason: 'full' });
       ws.close();
       return;
     }
 
-    const me: Player = {
+    const me: Player = known ?? {
       id: crypto.randomUUID().slice(0, 8),
       name: clean(msg.name, MAX_NAME) || 'Guest',
       color: COLORS.includes(msg.color) ? msg.color : COLORS[0],
@@ -515,6 +555,7 @@ export class Room extends DurableObject<Env> {
       lastSeen: Date.now(),
       lastChat: 0,
       lastEmote: 0,
+      resume: crypto.randomUUID() + crypto.randomUUID(),
     };
 
     let media: { url: string; token: string } | null = null;
@@ -527,12 +568,35 @@ export class Room extends DurableObject<Env> {
         this.joining.delete(ws);
       }
       // The socket may have closed, or the room filled, while the token was being signed.
-      if (ws.readyState !== WebSocket.OPEN || this.players.size >= MAX_PLAYERS) {
+      if (ws.readyState !== WebSocket.OPEN) {
         this.drop(ws);
         return;
       }
     }
-
+    // Take their held place back (it may have run out while the token was being signed, in which
+    // case they come in as a newcomer with the same id).
+    let back = false;
+    if (known) {
+      if (this.away.delete(known.id)) back = true;
+      else if (this.players.get(known.ws) === known && known.ws !== ws) {
+        // The server had not yet noticed the old connection die: swap it for the new one.
+        const old = known.ws;
+        this.players.delete(old);
+        try {
+          old.close();
+        } catch {
+          /* already closed */
+        }
+        back = true;
+      }
+    }
+    if (!back && this.players.size + this.away.size >= MAX_PLAYERS) {
+      this.send(ws, { t: 'denied', reason: 'full' });
+      ws.close();
+      return;
+    }
+    me.ws = ws;
+    me.lastSeen = Date.now();
     this.players.set(ws, me);
     this.kitchen.now = Date.now();
     this.send(ws, {
@@ -545,10 +609,16 @@ export class Room extends DurableObject<Env> {
       media,
       work: this.work && { ago: Date.now() - this.work.at, by: this.work.by },
       duels: this.duels.views(Date.now()),
+      resume: me.resume,
     });
     this.refreshBoard();
-    this.broadcast({ t: 'join', player: publicInfo(me) }, ws);
-    this.npc.greet(me.name, Date.now());
+    if (back) {
+      this.broadcast({ t: 'away', id: me.id, away: false }, ws);
+      this.tables.refresh(seatGroup(me.seat)); // their cards and board again
+    } else {
+      this.broadcast({ t: 'join', player: publicInfo(me) }, ws);
+      this.npc.greet(me.name, Date.now());
+    }
     for (const g of this.mini.values()) this.safely(() => g.onJoin?.(publicInfo(me), Date.now()));
     this.timer ??= setInterval(() => this.tick(), 1000 / TICK_HZ);
   }

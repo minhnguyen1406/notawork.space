@@ -138,7 +138,7 @@ const before = await a.pos();
 const oldId = await a.evaluate(() => window.__debug.id());
 await a.evaluate(() => window.__debug.dropRoom());
 check('a dropped connection says it is reconnecting', await until(async () => (await a.$eval('#toast', (e) => (e.hidden ? '' : e.textContent))).includes('Reconnecting'), 4000));
-check('and comes back by itself', await until(async () => { const id = await a.evaluate(() => window.__debug.id()); return id && id !== oldId; }));
+check('and comes back by itself', await until(async () => { const id = await a.evaluate(() => window.__debug.id()); return id === oldId; }));
 await sleep(1200);
 const after = await a.pos();
 check(`standing where you were (${after.map((n) => n.toFixed(1))})`, Math.hypot(after[0] - before[0], after[1] - before[1]) < 0.3);
@@ -146,7 +146,7 @@ check('the notice is cleared', await a.$eval('#toast', (e) => e.hidden));
 check('voice reconnects too', await until(async () => (await a.evaluate(() => window.__debug.media())) !== null));
 const newId = await a.evaluate(() => window.__debug.id());
 check('the other player sees you back, once', await until(async () => { const w = await b.evaluate((id) => window.__debug.where(id), newId); return !!w && Math.hypot(w[0] - before[0], w[1] - before[1]) < 1; }));
-check('and your old self is gone for them', (await b.evaluate((id) => window.__debug.where(id), oldId)) === null);
+check('as the same person, not a newcomer', newId === oldId);
 check('the room count is right for both', (await a.$eval('#online', (e) => e.textContent)) === '3 here' && (await b.$eval('#online', (e) => e.textContent)) === '3 here'); // two people and Claude
 await hold('KeyS', 600);
 check('and you can walk again', (await a.pos())[1] > after[1] + 1);

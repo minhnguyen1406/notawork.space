@@ -609,6 +609,7 @@ function handle(msg: ServerMsg) {
   switch (msg.t) {
     case 'welcome': {
       myId = msg.id;
+      resumeKey = msg.resume ?? '';
       for (const p of msg.players) addAvatar(p);
       me = avatars.get(myId)!;
       me.local = true;
@@ -627,7 +628,8 @@ function handle(msg: ServerMsg) {
       emit({ kind: 'welcome' });
       if (backTo) {
         // Reconnected: put me back where I was standing.
-        me.place(backTo.x, backTo.z, backTo.ry);
+        // (If my seat was held, I am still sitting in it.)
+        if (!me.seat) me.place(backTo.x, backTo.z, backTo.ry);
         camFocus.set(me.x, 1.6, me.z);
         sent.x = sent.z = sent.ry = Infinity;
         backTo = null;
@@ -645,6 +647,11 @@ function handle(msg: ServerMsg) {
         toast(msg.reason === 'password' ? 'The room password has changed. Reload the page.' : 'The room filled up while you were away. Reload to try again.', true);
       } else joinFailed(msg.reason === 'password' ? 'That password is not right.' : 'The room is full right now.');
       break;
+    case 'away': {
+      const a = avatars.get(msg.id);
+      if (a) logLine(msg.away ? `${a.info.name} lost connection. Holding their place for a minute.` : `${a.info.name} is back`);
+      break;
+    }
     case 'join':
       addAvatar(msg.player);
       emit({ kind: 'join', player: msg.player });
@@ -863,11 +870,17 @@ let everJoined = false;
 let retries = 0;
 /** Where I was standing when the connection dropped. */
 let backTo: { x: number; z: number; ry: number } | null = null;
+/** The key the server gave me, which lets me back in as myself (same seat, same cards) after a drop. */
+let resumeKey = '';
+// Closing the tab is leaving on purpose: say so, so nothing is held for me.
+window.addEventListener('pagehide', () => {
+  if (me) send({ t: 'bye' });
+});
 
 function connect() {
   const socket = new WebSocket(wsUrl);
   ws = socket;
-  socket.onopen = () => send({ t: 'join', name: joinName, color, look, password: passwordInput.value || undefined });
+  socket.onopen = () => send({ t: 'join', name: joinName, color, look, password: passwordInput.value || undefined, resume: resumeKey || undefined });
   socket.onmessage = (ev) => {
     try {
       handle(JSON.parse(ev.data as string));
@@ -1395,7 +1408,10 @@ if (import.meta.env.DEV) {
     pos: () => (me ? [me.x, me.z] : null),
     ball: () => ({ ...games.ball }),
     id: () => myId,
-    dropRoom: () => ws?.close(),
+    /** Break the connection the way a network failure would (an untidy close, so my place is held). */
+    dropRoom: () => ws?.close(4001, 'test drop'),
+    /** Walk out properly: a tidy close, so I am gone at once. */
+    leaveRoom: () => ws?.close(),
     duel: () => duelUI.mine(),
     talking: () => [...avatars].filter(([, a]) => a.speaking).map(([id]) => id),
     looks: () => Object.fromEntries([...avatars].map(([id, a]) => [id, a.info.look])),

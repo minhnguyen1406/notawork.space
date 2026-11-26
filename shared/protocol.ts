@@ -4,6 +4,8 @@ import type { KitchenState } from './kitchen';
 import type { BallState } from './ball';
 
 export const MAX_PLAYERS = 40;
+/** How long a seat, a hand of cards and a place in a game are held for someone whose connection dropped. */
+export const HOLD_MS = 60_000;
 export const MAX_NAME = 24;
 export const MAX_CHAT = 200;
 export const TICK_HZ = 10;
@@ -47,7 +49,10 @@ export interface GamesState {
 }
 
 export type ClientMsg =
-  | { t: 'join'; name: string; color: string; look?: string; password?: string }
+  /** `resume` is the key from an earlier welcome: with it you come back as the same person, seat and all. */
+  | { t: 'join'; name: string; color: string; look?: string; password?: string; resume?: string }
+  /** Leaving on purpose (closing the tab), so nothing is held for me. */
+  | { t: 'bye' }
   | { t: 'move'; x: number; z: number; ry: number }
   | { t: 'chat'; text: string }
   /** A reaction over your head, a dance, or a snooze (see shared/fun.ts). */
@@ -78,7 +83,11 @@ export type ServerMsg =
       work: { ago: number; by: string } | null;
       /** Duels under way when you arrive. */
       duels: DuelView[];
+      /** Send this back when rejoining after a dropped connection, to keep your place. */
+      resume?: string;
     }
+  /** Someone's connection dropped and their place is being held, or they are back. */
+  | { t: 'away'; id: string; away: boolean }
   | { t: 'denied'; reason: 'full' | 'password' }
   | { t: 'join'; player: PlayerInfo }
   | { t: 'leave'; id: string }
