@@ -647,6 +647,25 @@ function handle(msg: ServerMsg) {
         toast(msg.reason === 'password' ? 'The room password has changed. Reload the page.' : 'The room filled up while you were away. Reload to try again.', true);
       } else joinFailed(msg.reason === 'password' ? 'That password is not right.' : 'The room is full right now.');
       break;
+    case 'media': {
+      // Voice has moved to the other server: drop the old connection and join the new one.
+      const old = media;
+      media = null;
+      void old?.close();
+      cams.clear();
+      for (const a of avatars.values()) a.setVideo(null);
+      world.setScreenVideo(null);
+      closeTheater();
+      micLatched = talkHeld = false;
+      btnMic.textContent = 'Mic off · hold V';
+      btnMic.classList.remove('on');
+      btnCam.textContent = 'Camera off';
+      btnCam.classList.remove('on');
+      for (const b of [btnMic, btnCam, btnShare, btnTheater]) b.hidden = true;
+      renderGrid();
+      void startMedia(msg.media.url, msg.media.token);
+      break;
+    }
     case 'away': {
       const a = avatars.get(msg.id);
       if (a) logLine(msg.away ? `${a.info.name} lost connection. Holding their place for a minute.` : `${a.info.name} is back`);

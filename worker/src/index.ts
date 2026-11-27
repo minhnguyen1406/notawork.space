@@ -31,11 +31,36 @@ export interface Env {
   LIVEKIT_API_SECRET?: string;
   /** Which voice room to use. Local development sets its own, so tests never land in the live call. */
   LIVEKIT_ROOM?: string;
+  /**
+   * Optional: our own LiveKit server. When set, it is used first and LiveKit Cloud (the LIVEKIT_URL
+   * set above) becomes the backup, used only while our own server is not answering.
+   */
+  LIVEKIT_SELF_URL?: string;
+  LIVEKIT_SELF_API_KEY?: string;
+  LIVEKIT_SELF_API_SECRET?: string;
   /** Optional. With a Finnhub key, stock prices come from Finnhub instead of Yahoo's unofficial endpoint. */
   FINNHUB_API_KEY?: string;
 }
 
 const LIVEKIT_ROOM = 'main';
+/** How often our own voice server is checked while people are in the room, and how long a check may take. */
+const VOICE_CHECK_MS = 30_000;
+const VOICE_CHECK_TIMEOUT_MS = 3000;
+/** Checks in a row before moving: two failures to go to the backup, three successes to come back. */
+const VOICE_FAILS_TO_LEAVE = 2;
+const VOICE_PASSES_TO_RETURN = 3;
+
+type VoiceServer = 'self' | 'cloud';
+
+/** Does our own LiveKit server answer? (Its web port says OK at the root.) */
+async function voiceAlive(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url.replace(/^ws/, 'http'), { signal: AbortSignal.timeout(VOICE_CHECK_TIMEOUT_MS) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 const REACH = 3.5; // how close you must be to a station to use it
 const STALE_MS = 180_000; // browsers slow a hidden tab's timers to as little as once a minute
 const WHEEL_SPIN_MS = 4500;
@@ -194,6 +219,63 @@ export class Room extends DurableObject<Env> {
   private wheelBusyUntil = 0;
   private board: Board = { news: [], stocks: [], at: 0 };
   private boardBusy = false;
+
+  // ---- Voice: our own server first, LiveKit Cloud as the backup.
+  /** Which voice server everyone is on now (null until the first person arrives). Everyone shares one, or they could not hear each other. */
+  private voice: VoiceServer | null = null;
+  private voiceStreak = 0;
+  private voiceChecking = false;
+  private voiceCheckedAt = 0;
+
+  private voiceCreds(which: VoiceServer) {
+    const e = this.env;
+    if (which === 'self') return e.LIVEKIT_SELF_URL && e.LIVEKIT_SELF_API_KEY && e.LIVEKIT_SELF_API_SECRET ? { url: e.LIVEKIT_SELF_URL, key: e.LIVEKIT_SELF_API_KEY, secret: e.LIVEKIT_SELF_API_SECRET } : null;
+    return e.LIVEKIT_URL && e.LIVEKIT_API_KEY && e.LIVEKIT_API_SECRET ? { url: e.LIVEKIT_URL, key: e.LIVEKIT_API_KEY, secret: e.LIVEKIT_API_SECRET } : null;
+  }
+
+  /** Which server to use, deciding on the first arrival (a quick check of our own server). */
+  private async pickVoice(): Promise<VoiceServer | null> {
+    if (this.voice) return this.voice;
+    const self = this.voiceCreds('self');
+    const cloud = this.voiceCreds('cloud');
+    if (!self) return (this.voice = cloud ? 'cloud' : null);
+    this.voice = !cloud || (await voiceAlive(self.url)) ? 'self' : 'cloud';
+    this.voiceStreak = 0;
+    this.voiceCheckedAt = Date.now();
+    return this.voice;
+  }
+
+  private async mediaFor(p: { id: string; name: string }, which: VoiceServer | null) {
+    const c = which && this.voiceCreds(which);
+    if (!c) return null;
+    return { url: c.url, token: await livekitToken(c.key, c.secret, this.env.LIVEKIT_ROOM || LIVEKIT_ROOM, p.id, p.name) };
+  }
+
+  /** Every so often, see whether our own server is still answering (or is back), and move everyone if so. */
+  private checkVoice() {
+    const self = this.voiceCreds('self');
+    if (!self || !this.voiceCreds('cloud') || !this.voice || this.voiceChecking || Date.now() - this.voiceCheckedAt < VOICE_CHECK_MS) return;
+    this.voiceChecking = true;
+    this.voiceCheckedAt = Date.now();
+    voiceAlive(self.url)
+      .then(async (alive) => {
+        // A streak counts checks that point away from where we are now.
+        const against = this.voice === 'self' ? !alive : alive;
+        this.voiceStreak = against ? this.voiceStreak + 1 : 0;
+        const need = this.voice === 'self' ? VOICE_FAILS_TO_LEAVE : VOICE_PASSES_TO_RETURN;
+        if (this.voiceStreak < need) return;
+        this.voice = this.voice === 'self' ? 'cloud' : 'self';
+        this.voiceStreak = 0;
+        console.log('voice moved to', this.voice);
+        this.broadcast({ t: 'notice', text: this.voice === 'cloud' ? 'Voice moved to the backup server. Reconnecting…' : 'Voice is back on the main server. Reconnecting…' });
+        for (const p of [...this.players.values()]) {
+          const media = await this.mediaFor(p, this.voice);
+          if (media && this.players.get(p.ws) === p) this.send(p.ws, { t: 'media', media });
+        }
+      })
+      .catch((err) => console.error('voice check failed', err))
+      .finally(() => (this.voiceChecking = false));
+  }
   /** The last time someone mentioned work in chat. */
   private work: { at: number; by: string } | null = null;
 
@@ -290,6 +372,7 @@ export class Room extends DurableObject<Env> {
       if (this.npc.info.seat) this.npcSit(null);
       this.npc.reset();
       this.npcLines.length = 0;
+      this.voice = null;
     }
   }
 
@@ -322,6 +405,7 @@ export class Room extends DurableObject<Env> {
         this.leave(a.p);
       }
     }
+    this.checkVoice();
     this.tickBall();
     if (this.npc.tick(1 / TICK_HZ)) this.moved = true;
     this.duels.tick(Date.now());
@@ -559,11 +643,10 @@ export class Room extends DurableObject<Env> {
     };
 
     let media: { url: string; token: string } | null = null;
-    const { LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET } = this.env;
-    if (LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET) {
+    if (this.voiceCreds('self') || this.voiceCreds('cloud')) {
       this.joining.add(ws);
       try {
-        media = { url: LIVEKIT_URL, token: await livekitToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, this.env.LIVEKIT_ROOM || LIVEKIT_ROOM, me.id, me.name) };
+        media = await this.mediaFor(me, await this.pickVoice());
       } finally {
         this.joining.delete(ws);
       }

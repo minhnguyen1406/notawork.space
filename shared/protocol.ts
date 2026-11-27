@@ -88,6 +88,8 @@ export type ServerMsg =
     }
   /** Someone's connection dropped and their place is being held, or they are back. */
   | { t: 'away'; id: string; away: boolean }
+  /** Voice has moved to another server (the main one went down, or came back): reconnect with this. */
+  | { t: 'media'; media: { url: string; token: string } }
   | { t: 'denied'; reason: 'full' | 'password' }
   | { t: 'join'; player: PlayerInfo }
   | { t: 'leave'; id: string }

@@ -12,4 +12,6 @@
   //   LIVEKIT_URL          wss://<project>.livekit.cloud
   //   LIVEKIT_API_KEY
   //   LIVEKIT_API_SECRET
+  //   LIVEKIT_SELF_URL / LIVEKIT_SELF_API_KEY / LIVEKIT_SELF_API_SECRET   optional: our own LiveKit server,
+  //                        used first, with the LiveKit Cloud settings above as the backup
 }
